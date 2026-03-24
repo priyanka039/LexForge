@@ -1,0 +1,2175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>LexForge — Legal Argument & Opposition Engine</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;0,700;1,400;1,600&family=DM+Mono:wght@300;400;500&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet"/>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<style>
+  :root {
+    --navy: #0a0f1e;
+    --navy-mid: #111827;
+    --navy-card: #161d2e;
+    --navy-border: #1e2a40;
+    --navy-hover: #1c2540;
+    --gold: #c9a84c;
+    --gold-light: #e2c97e;
+    --gold-dim: #a07c35;
+    --cream: #f5f0e8;
+    --cream-dim: #c8bfb0;
+    --white: #ffffff;
+    --muted: #6b7a99;
+    --red: #c0392b;
+    --amber: #d97706;
+    --green: #16a34a;
+    --blue-accent: #3b6fd4;
+    --sidebar-w: 240px;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    font-family: 'Instrument Sans', sans-serif;
+    background: var(--navy);
+    color: var(--cream);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ─── LAYOUT ─── */
+  .app { display: flex; min-height: 100vh; }
+
+  /* ─── SIDEBAR ─── */
+  .sidebar {
+    width: var(--sidebar-w);
+    background: var(--navy-mid);
+    border-right: 1px solid var(--navy-border);
+    display: flex;
+    flex-direction: column;
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    z-index: 100;
+    transition: transform 0.3s ease;
+  }
+
+  .sidebar-logo {
+    padding: 28px 24px 20px;
+    border-bottom: 1px solid var(--navy-border);
+  }
+
+  .logo-mark {
+    display: flex; align-items: center; gap: 10px;
+  }
+
+  .logo-icon {
+    width: 32px; height: 32px;
+    background: linear-gradient(135deg, var(--gold), var(--gold-dim));
+    border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Cormorant Garamond', serif;
+    font-weight: 700; font-size: 18px;
+    color: var(--navy);
+    flex-shrink: 0;
+    box-shadow: 0 0 20px rgba(201,168,76,0.3);
+  }
+
+  .logo-text {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 20px; font-weight: 700;
+    color: var(--cream);
+    letter-spacing: 0.02em;
+  }
+
+  .logo-sub {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    color: var(--gold);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-top: 2px;
+  }
+
+  .sidebar-section {
+    padding: 20px 14px 8px;
+  }
+
+  .sidebar-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 0 10px 8px;
+  }
+
+  .nav-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+    font-size: 13.5px;
+    font-weight: 500;
+    color: var(--cream-dim);
+    margin-bottom: 2px;
+    position: relative;
+    text-decoration: none;
+  }
+
+  .nav-item:hover { background: var(--navy-hover); color: var(--cream); }
+
+  .nav-item.active {
+    background: rgba(201,168,76,0.12);
+    color: var(--gold-light);
+  }
+
+  .nav-item.active::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 50%;
+    transform: translateY(-50%);
+    width: 3px; height: 60%;
+    background: var(--gold);
+    border-radius: 0 4px 4px 0;
+  }
+
+  .nav-icon { font-size: 15px; opacity: 0.85; flex-shrink: 0; width: 18px; text-align: center; }
+
+  .nav-badge {
+    margin-left: auto;
+    background: var(--gold);
+    color: var(--navy);
+    font-size: 9px;
+    font-family: 'DM Mono', monospace;
+    font-weight: 500;
+    padding: 2px 6px;
+    border-radius: 10px;
+  }
+
+  .sidebar-bottom {
+    margin-top: auto;
+    padding: 16px 14px;
+    border-top: 1px solid var(--navy-border);
+  }
+
+  .user-card {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+  }
+
+  .user-avatar {
+    width: 30px; height: 30px; border-radius: 50%;
+    background: linear-gradient(135deg, #3b6fd4, #7b4fd4);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 600; color: white;
+    flex-shrink: 0;
+  }
+
+  .user-info .user-name { font-size: 12.5px; font-weight: 500; color: var(--cream); }
+  .user-info .user-role { font-size: 10px; color: var(--muted); }
+
+  /* ─── MAIN CONTENT ─── */
+  .main {
+    margin-left: var(--sidebar-w);
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+  }
+
+  /* ─── TOP BAR ─── */
+  .topbar {
+    height: 64px;
+    border-bottom: 1px solid var(--navy-border);
+    display: flex; align-items: center;
+    padding: 0 32px;
+    gap: 16px;
+    background: rgba(10,15,30,0.85);
+    backdrop-filter: blur(12px);
+    position: sticky; top: 0;
+    z-index: 90;
+  }
+
+  .topbar-title {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 22px; font-weight: 600;
+    color: var(--cream);
+    flex: 1;
+  }
+
+  .topbar-chip {
+    display: flex; align-items: center; gap: 6px;
+    background: var(--navy-card);
+    border: 1px solid var(--navy-border);
+    border-radius: 20px;
+    padding: 5px 12px;
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    cursor: pointer;
+    transition: border-color 0.15s;
+  }
+  .topbar-chip:hover { border-color: var(--gold-dim); color: var(--cream-dim); }
+  .topbar-chip .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); }
+
+  .btn {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 9px 18px;
+    border-radius: 8px;
+    font-family: 'Instrument Sans', sans-serif;
+    font-size: 13px; font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+    border: none;
+    text-decoration: none;
+  }
+
+  .btn-gold {
+    background: linear-gradient(135deg, var(--gold), var(--gold-dim));
+    color: var(--navy);
+    box-shadow: 0 2px 12px rgba(201,168,76,0.25);
+  }
+  .btn-gold:hover { box-shadow: 0 4px 20px rgba(201,168,76,0.4); transform: translateY(-1px); }
+
+  .btn-ghost {
+    background: transparent;
+    border: 1px solid var(--navy-border);
+    color: var(--cream-dim);
+  }
+  .btn-ghost:hover { border-color: var(--gold-dim); color: var(--cream); background: var(--navy-hover); }
+
+  /* ─── PAGE WRAPPER ─── */
+  .page { padding: 36px 32px; max-width: 1200px; margin: 0 auto; width: 100%; }
+
+  /* ─── SECTION HEADER ─── */
+  .section-header { margin-bottom: 28px; }
+  .section-eyebrow {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px; letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin-bottom: 6px;
+  }
+  .section-title {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 32px; font-weight: 700;
+    color: var(--cream);
+    line-height: 1.15;
+  }
+  .section-sub {
+    font-size: 14px; color: var(--muted);
+    margin-top: 6px;
+  }
+
+  /* ─── MODE TABS ─── */
+  .mode-tabs {
+    display: flex; gap: 6px;
+    background: var(--navy-card);
+    border: 1px solid var(--navy-border);
+    border-radius: 12px;
+    padding: 5px;
+    margin-bottom: 28px;
+    width: fit-content;
+  }
+
+  .mode-tab {
+    padding: 9px 20px;
+    border-radius: 8px;
+    font-size: 13px; font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+    color: var(--muted);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .mode-tab:hover { color: var(--cream-dim); background: var(--navy-hover); }
+  .mode-tab.active {
+    background: linear-gradient(135deg, var(--gold), var(--gold-dim));
+    color: var(--navy);
+  }
+
+  /* ─── CARDS ─── */
+  .card {
+    background: var(--navy-card);
+    border: 1px solid var(--navy-border);
+    border-radius: 14px;
+    padding: 24px;
+    transition: border-color 0.2s;
+  }
+  .card:hover { border-color: rgba(201,168,76,0.25); }
+
+  .card-title {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 17px; font-weight: 600;
+    color: var(--cream);
+    margin-bottom: 4px;
+  }
+  .card-sub { font-size: 12px; color: var(--muted); margin-bottom: 20px; }
+
+  /* ─── FORM ELEMENTS ─── */
+  .form-group { margin-bottom: 18px; }
+  .form-label {
+    display: block;
+    font-family: 'DM Mono', monospace;
+    font-size: 10px; letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+
+  .form-input, .form-textarea, .form-select {
+    width: 100%;
+    background: var(--navy);
+    border: 1px solid var(--navy-border);
+    border-radius: 8px;
+    padding: 11px 14px;
+    font-family: 'Instrument Sans', sans-serif;
+    font-size: 14px;
+    color: var(--cream);
+    outline: none;
+    transition: border-color 0.15s;
+    resize: vertical;
+  }
+  .form-input:focus, .form-textarea:focus, .form-select:focus {
+    border-color: var(--gold-dim);
+    box-shadow: 0 0 0 3px rgba(201,168,76,0.08);
+  }
+  .form-textarea { min-height: 120px; line-height: 1.6; }
+
+  .form-select { appearance: none; cursor: pointer; }
+  .form-select option { background: var(--navy-mid); }
+
+  /* ─── GRID LAYOUTS ─── */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; }
+
+  /* ─── IRAC OUTPUT ─── */
+  .irac-block {
+    border: 1px solid var(--navy-border);
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 20px;
+  }
+
+  .irac-header {
+    display: flex; align-items: center; gap: 12px;
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--navy-border);
+    background: rgba(201,168,76,0.05);
+  }
+
+  .irac-letter {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 28px; font-weight: 700;
+    color: var(--gold);
+    line-height: 1;
+    width: 32px;
+    flex-shrink: 0;
+  }
+
+  .irac-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px; letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--gold-dim);
+  }
+
+  .irac-heading {
+    font-size: 14px; font-weight: 600;
+    color: var(--cream);
+  }
+
+  .irac-body {
+    padding: 18px 20px;
+    font-size: 14px; line-height: 1.75;
+    color: var(--cream-dim);
+  }
+
+  .citation-tag {
+    display: inline-flex; align-items: center; gap: 4px;
+    background: rgba(59,111,212,0.15);
+    border: 1px solid rgba(59,111,212,0.3);
+    border-radius: 4px;
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    color: #7eaaee;
+    padding: 1px 6px;
+    margin-left: 4px;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .citation-tag:hover { background: rgba(59,111,212,0.3); }
+
+  /* ─── RISK BADGE ─── */
+  .risk-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 12px;
+    border-radius: 20px;
+    font-family: 'DM Mono', monospace;
+    font-size: 11px; font-weight: 500;
+    letter-spacing: 0.06em;
+  }
+  .risk-low { background: rgba(22,163,74,0.15); color: #4ade80; border: 1px solid rgba(22,163,74,0.3); }
+  .risk-moderate { background: rgba(217,119,6,0.15); color: #fbbf24; border: 1px solid rgba(217,119,6,0.3); }
+  .risk-high { background: rgba(192,57,43,0.15); color: #f87171; border: 1px solid rgba(192,57,43,0.3); }
+
+  /* ─── STAT CHIPS ─── */
+  .stat-row { display: flex; gap: 14px; margin-bottom: 24px; flex-wrap: wrap; }
+
+  .stat-chip {
+    background: var(--navy-card);
+    border: 1px solid var(--navy-border);
+    border-radius: 10px;
+    padding: 14px 18px;
+    flex: 1; min-width: 120px;
+  }
+
+  .stat-value {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 28px; font-weight: 700;
+    color: var(--gold-light);
+  }
+  .stat-label { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+  /* ─── PRECEDENT LIST ─── */
+  .precedent-item {
+    display: flex; align-items: flex-start; gap: 14px;
+    padding: 14px 0;
+    border-bottom: 1px solid var(--navy-border);
+  }
+  .precedent-item:last-child { border-bottom: none; }
+
+  .precedent-rank {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    color: var(--muted);
+    flex-shrink: 0;
+    width: 20px;
+    margin-top: 2px;
+  }
+
+  .precedent-body { flex: 1; }
+  .precedent-name {
+    font-size: 13.5px; font-weight: 600;
+    color: var(--cream);
+    margin-bottom: 3px;
+  }
+  .precedent-meta {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px; color: var(--muted);
+    margin-bottom: 5px;
+  }
+  .precedent-snippet { font-size: 12.5px; color: var(--cream-dim); line-height: 1.6; }
+
+  .binding-tag {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px; letter-spacing: 0.08em;
+    padding: 2px 7px; border-radius: 4px;
+    display: inline-block;
+    margin-left: 8px;
+  }
+  .binding { background: rgba(201,168,76,0.15); color: var(--gold); border: 1px solid rgba(201,168,76,0.3); }
+  .persuasive { background: rgba(107,122,153,0.15); color: var(--muted); border: 1px solid rgba(107,122,153,0.3); }
+
+  /* ─── DEBATE COLUMNS ─── */
+  .debate-grid {
+    display: grid;
+    grid-template-columns: 1fr 40px 1fr;
+    gap: 0;
+    margin-bottom: 24px;
+  }
+
+  .debate-col {
+    border: 1px solid var(--navy-border);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  .debate-col-header {
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--navy-border);
+    font-family: 'DM Mono', monospace;
+    font-size: 10px; letter-spacing: 0.15em;
+    text-transform: uppercase;
+  }
+  .plaintiff-col .debate-col-header { color: var(--blue-accent); background: rgba(59,111,212,0.08); }
+  .defense-col .debate-col-header { color: #c45c5c; background: rgba(192,57,43,0.08); }
+
+  .debate-vs {
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 16px; font-weight: 700;
+    color: var(--muted);
+  }
+
+  .debate-body { padding: 16px 18px; }
+  .debate-point {
+    font-size: 13px; line-height: 1.7;
+    color: var(--cream-dim);
+    margin-bottom: 12px;
+    padding-left: 12px;
+    border-left: 2px solid var(--navy-border);
+  }
+
+  /* ─── PROGRESS/PIPELINE ─── */
+  .pipeline {
+    display: flex; align-items: center; gap: 0;
+    margin-bottom: 28px;
+    background: var(--navy-card);
+    border: 1px solid var(--navy-border);
+    border-radius: 12px;
+    padding: 16px 24px;
+    overflow-x: auto;
+  }
+
+  .pipeline-step {
+    display: flex; align-items: center; gap: 8px;
+    flex-shrink: 0;
+  }
+
+  .pipeline-dot {
+    width: 28px; height: 28px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 600;
+    flex-shrink: 0;
+  }
+  .pipeline-dot.done { background: var(--gold); color: var(--navy); }
+  .pipeline-dot.active { background: var(--blue-accent); color: white; box-shadow: 0 0 12px rgba(59,111,212,0.5); }
+  .pipeline-dot.pending { background: var(--navy); border: 1px solid var(--navy-border); color: var(--muted); }
+
+  .pipeline-info { }
+  .pipeline-step-name { font-size: 12px; font-weight: 500; color: var(--cream-dim); }
+  .pipeline-step-status { font-family: 'DM Mono', monospace; font-size: 9px; color: var(--muted); }
+
+  .pipeline-line {
+    flex: 1;
+    height: 1px;
+    background: var(--navy-border);
+    min-width: 20px;
+    margin: 0 10px;
+  }
+
+  /* ─── DASHBOARD HOME ─── */
+  .home-hero {
+    background: var(--navy-card);
+    border: 1px solid var(--navy-border);
+    border-radius: 16px;
+    padding: 36px 36px 32px;
+    margin-bottom: 28px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .home-hero::before {
+    content: 'IRAC';
+    position: absolute;
+    right: 30px; top: 50%;
+    transform: translateY(-50%);
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 120px; font-weight: 700;
+    color: rgba(201,168,76,0.04);
+    letter-spacing: 0.05em;
+    pointer-events: none;
+    line-height: 1;
+  }
+
+  .home-hero-eyebrow {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px; letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin-bottom: 12px;
+  }
+
+  .home-hero-title {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 42px; font-weight: 700;
+    color: var(--cream);
+    line-height: 1.1;
+    margin-bottom: 12px;
+    max-width: 500px;
+  }
+
+  .home-hero-title em { color: var(--gold); font-style: italic; }
+
+  .home-hero-desc {
+    font-size: 14px; line-height: 1.7;
+    color: var(--muted);
+    max-width: 480px;
+    margin-bottom: 24px;
+  }
+
+  .btn-row { display: flex; gap: 10px; flex-wrap: wrap; }
+
+  /* ─── QUICK ACTIONS ─── */
+  .quick-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 28px; }
+
+  .quick-card {
+    background: var(--navy-card);
+    border: 1px solid var(--navy-border);
+    border-radius: 14px;
+    padding: 22px;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+    overflow: hidden;
+  }
+  .quick-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--gold), transparent);
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+  .quick-card:hover { border-color: rgba(201,168,76,0.35); transform: translateY(-2px); }
+  .quick-card:hover::before { opacity: 1; }
+
+  .quick-icon { font-size: 22px; margin-bottom: 12px; }
+  .quick-title { font-family: 'Cormorant Garamond', serif; font-size: 16px; font-weight: 600; color: var(--cream); margin-bottom: 4px; }
+  .quick-desc { font-size: 12px; color: var(--muted); line-height: 1.6; }
+  .quick-arrow { position: absolute; right: 18px; top: 22px; color: var(--muted); font-size: 16px; transition: color 0.15s, transform 0.15s; }
+  .quick-card:hover .quick-arrow { color: var(--gold); transform: translateX(3px); }
+
+  /* ─── RECENT ACTIVITY ─── */
+  .activity-list { }
+  .activity-item {
+    display: flex; align-items: center; gap: 14px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--navy-border);
+  }
+  .activity-item:last-child { border-bottom: none; }
+
+  .activity-icon {
+    width: 34px; height: 34px; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; flex-shrink: 0;
+  }
+  .activity-icon.research { background: rgba(59,111,212,0.15); }
+  .activity-icon.argument { background: rgba(201,168,76,0.12); }
+  .activity-icon.opposition { background: rgba(192,57,43,0.12); }
+
+  .activity-body { flex: 1; }
+  .activity-title { font-size: 13.5px; font-weight: 500; color: var(--cream); margin-bottom: 2px; }
+  .activity-meta { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--muted); }
+
+  .activity-status {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    padding: 3px 8px;
+    border-radius: 20px;
+    flex-shrink: 0;
+  }
+  .status-done { background: rgba(22,163,74,0.15); color: #4ade80; }
+  .status-running { background: rgba(59,111,212,0.15); color: #7eaaee; }
+
+  /* ─── OPPOSITION PANEL ─── */
+  .weakness-item {
+    display: flex; gap: 14px;
+    padding: 14px;
+    background: rgba(192,57,43,0.06);
+    border: 1px solid rgba(192,57,43,0.18);
+    border-radius: 10px;
+    margin-bottom: 10px;
+  }
+  .weakness-num {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: #f87171;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+  .weakness-text { font-size: 13.5px; line-height: 1.65; color: var(--cream-dim); }
+
+  /* ─── SEARCH/RESEARCH ─── */
+  .search-bar {
+    display: flex; gap: 10px;
+    margin-bottom: 24px;
+  }
+  .search-input {
+    flex: 1;
+    background: var(--navy-card);
+    border: 1px solid var(--navy-border);
+    border-radius: 10px;
+    padding: 13px 18px;
+    font-family: 'Instrument Sans', sans-serif;
+    font-size: 14px; color: var(--cream);
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .search-input:focus { border-color: var(--gold-dim); }
+  .search-input::placeholder { color: var(--muted); }
+
+  /* ─── DIVIDER ─── */
+  .divider {
+    height: 1px;
+    background: var(--navy-border);
+    margin: 24px 0;
+  }
+
+  /* ─── TABS WITHIN PAGE ─── */
+  .sub-tabs {
+    display: flex; gap: 0;
+    border-bottom: 1px solid var(--navy-border);
+    margin-bottom: 24px;
+  }
+  .sub-tab {
+    padding: 10px 18px;
+    font-size: 13px; font-weight: 500;
+    color: var(--muted);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    transition: all 0.15s;
+  }
+  .sub-tab:hover { color: var(--cream-dim); }
+  .sub-tab.active { color: var(--gold-light); border-bottom-color: var(--gold); }
+
+  /* ─── SCROLL AREA ─── */
+  .scroll-area { max-height: 380px; overflow-y: auto; padding-right: 4px; }
+  .scroll-area::-webkit-scrollbar { width: 4px; }
+  .scroll-area::-webkit-scrollbar-track { background: transparent; }
+  .scroll-area::-webkit-scrollbar-thumb { background: var(--navy-border); border-radius: 4px; }
+
+  /* ─── ANIMATIONS ─── */
+  @keyframes fadeSlide {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+
+  .animate-in { animation: fadeSlide 0.35s ease both; }
+  .animate-in:nth-child(2) { animation-delay: 0.06s; }
+  .animate-in:nth-child(3) { animation-delay: 0.12s; }
+  .animate-in:nth-child(4) { animation-delay: 0.18s; }
+
+  .loading-dot {
+    display: inline-block; width: 6px; height: 6px;
+    border-radius: 50%; background: var(--gold);
+    animation: pulse 1.2s ease-in-out infinite;
+    margin: 0 2px;
+  }
+  .loading-dot:nth-child(2) { animation-delay: 0.2s; }
+  .loading-dot:nth-child(3) { animation-delay: 0.4s; }
+
+  /* ─── SCREEN MANAGEMENT ─── */
+  .screen { display: none; }
+  .screen.active { display: block; }
+
+  /* ─── TOOLTIP HELPER ─── */
+  .helper-text {
+    font-size: 11.5px; color: var(--muted);
+    margin-top: 6px;
+    font-family: 'DM Mono', monospace;
+  }
+
+  /* ─── INLINE FLEX UTILS ─── */
+  .flex { display: flex; }
+  .flex-col { flex-direction: column; }
+  .items-center { align-items: center; }
+  .justify-between { justify-content: space-between; }
+  .gap-8 { gap: 8px; }
+  .gap-12 { gap: 12px; }
+  .mb-6 { margin-bottom: 6px; }
+  .mb-12 { margin-bottom: 12px; }
+  .mb-16 { margin-bottom: 16px; }
+  .mb-24 { margin-bottom: 24px; }
+  .mt-8 { margin-top: 8px; }
+  .mt-16 { margin-top: 16px; }
+  .mt-24 { margin-top: 24px; }
+  .text-gold { color: var(--gold-light); }
+  .text-muted { color: var(--muted); }
+  .text-sm { font-size: 12.5px; }
+  .font-mono { font-family: 'DM Mono', monospace; }
+
+  /* ─── LOADING STATE ─── */
+  .generating-state {
+    text-align: center;
+    padding: 48px 32px;
+    display: none;
+  }
+  .generating-state.visible { display: block; }
+  .generating-icon {
+    font-size: 36px;
+    margin-bottom: 12px;
+    animation: pulse 2s ease-in-out infinite;
+  }
+  .generating-title {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 20px; font-weight: 600;
+    color: var(--cream);
+    margin-bottom: 8px;
+  }
+  .generating-desc { font-size: 13px; color: var(--muted); }
+
+  /* ─── HOVER EFFECT ON NAV ─── */
+  .nav-item { user-select: none; }
+
+  /* ─── MARKDOWN RENDERING ─── */
+  .answer-body p {
+    margin-bottom: 14px;
+    line-height: 1.8;
+  }
+  .answer-body ol,
+  .answer-body ul {
+    padding-left: 22px;
+    margin-bottom: 14px;
+  }
+  .answer-body li {
+    margin-bottom: 12px;
+    line-height: 1.8;
+    color: var(--cream-dim);
+  }
+  .answer-body li::marker {
+    color: var(--gold);
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+  }
+  .answer-body strong {
+    color: var(--cream);
+    font-weight: 600;
+  }
+  .answer-body em {
+    color: var(--gold-light);
+    font-style: italic;
+  }
+  .answer-body h1,
+  .answer-body h2,
+  .answer-body h3 {
+    font-family: 'Cormorant Garamond', serif;
+    color: var(--cream);
+    margin-bottom: 8px;
+    margin-top: 18px;
+    font-weight: 600;
+  }
+  .answer-body h3 { font-size: 16px; }
+  .answer-body code {
+    background: var(--navy);
+    border: 1px solid var(--navy-border);
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    color: var(--gold-light);
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ═══════════════ SIDEBAR ═══════════════ -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-mark">
+        <div class="logo-icon">L</div>
+        <div>
+          <div class="logo-text">LexForge</div>
+          <div class="logo-sub">Legal AI Engine</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">Workspace</div>
+      <a class="nav-item active" onclick="navigate('dashboard')">
+        <span class="nav-icon">⊞</span> Dashboard
+      </a>
+      <a class="nav-item" onclick="navigate('research')">
+        <span class="nav-icon">◎</span> Research Mode
+        <span class="nav-badge">RAG</span>
+      </a>
+      <a class="nav-item" onclick="navigate('argument')">
+        <span class="nav-icon">◈</span> Argument Builder
+      </a>
+      <a class="nav-item" onclick="navigate('opposition')">
+        <span class="nav-icon">⇌</span> Opposition Engine
+      </a>
+      <a class="nav-item" onclick="navigate('debate')">
+        <span class="nav-icon">⚖</span> Debate Mode
+      </a>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">History</div>
+      <a class="nav-item" style="padding-left:10px">
+        <span class="nav-icon" style="color:#7eaaee">◉</span>
+        <div style="min-width:0">
+          <div style="font-size:12px;color:var(--cream-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Sharma v. State</div>
+          <div class="font-mono" style="font-size:9px;color:var(--muted)">2h ago · Argument</div>
+        </div>
+      </a>
+      <a class="nav-item" style="padding-left:10px">
+        <span class="nav-icon" style="color:#c45c5c">◉</span>
+        <div style="min-width:0">
+          <div style="font-size:12px;color:var(--cream-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Contract Breach Analysis</div>
+          <div class="font-mono" style="font-size:9px;color:var(--muted)">Yesterday · Research</div>
+        </div>
+      </a>
+      <a class="nav-item" style="padding-left:10px">
+        <span class="nav-icon" style="color:var(--gold-dim)">◉</span>
+        <div style="min-width:0">
+          <div style="font-size:12px;color:var(--cream-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">IP Infringement Case</div>
+          <div class="font-mono" style="font-size:9px;color:var(--muted)">3 days ago · Debate</div>
+        </div>
+      </a>
+    </div>
+
+    <div class="sidebar-bottom">
+      <div class="user-card">
+        <div class="user-avatar">P</div>
+        <div class="user-info">
+          <div class="user-name">Priyanka</div>
+          <div class="user-role">Law Student · 2nd Year</div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ═══════════════ MAIN ═══════════════ -->
+  <main class="main">
+
+    <!-- ─── TOPBAR ─── -->
+    <div class="topbar">
+      <div class="topbar-title" id="topbar-title">Dashboard</div>
+      <div class="topbar-chip">
+        <div class="dot"></div>
+        Corpus: 247 Cases
+      </div>
+      <div class="topbar-chip">⚙ DeepSeek API</div>
+      <button class="btn btn-gold" onclick="navigate('argument')">
+        + New Argument
+      </button>
+    </div>
+
+    <!-- ═══ SCREEN: DASHBOARD ═══ -->
+    <div class="screen active" id="screen-dashboard">
+      <div class="page">
+        <!-- Hero -->
+        <div class="home-hero animate-in">
+          <div class="home-hero-eyebrow">⚖ AI-Powered Legal Strategy</div>
+          <h1 class="home-hero-title">
+            Build <em>grounded</em><br/>legal arguments<br/>at scale.
+          </h1>
+          <p class="home-hero-desc">
+            Retrieve precedents, structure IRAC arguments, and simulate opposition — all backed by your curated case corpus. No hallucinations, only citations.
+          </p>
+          <div class="btn-row">
+            <button class="btn btn-gold" onclick="navigate('argument')">⊕ Start Argument Builder</button>
+            <button class="btn btn-ghost" onclick="navigate('research')">◎ Search Precedents</button>
+          </div>
+        </div>
+
+        <!-- Stats -->
+        <div class="stat-row animate-in">
+          <div class="stat-chip">
+            <div class="stat-value">247</div>
+            <div class="stat-label">Cases in Corpus</div>
+          </div>
+          <div class="stat-chip">
+            <div class="stat-value">12</div>
+            <div class="stat-label">Arguments Built</div>
+          </div>
+          <div class="stat-chip">
+            <div class="stat-value">94%</div>
+            <div class="stat-label">Citation Rate</div>
+          </div>
+          <div class="stat-chip">
+            <div class="stat-value">&lt;3s</div>
+            <div class="stat-label">Avg Response Time</div>
+          </div>
+          <div class="stat-chip">
+            <div class="stat-value">2.1%</div>
+            <div class="stat-label">Hallucination Rate</div>
+          </div>
+        </div>
+
+        <!-- Quick actions -->
+        <div class="section-header animate-in">
+          <div class="section-eyebrow">Quick Access</div>
+          <div class="section-title">What would you like to do?</div>
+        </div>
+        <div class="quick-grid animate-in">
+          <div class="quick-card" onclick="navigate('research')">
+            <div class="quick-icon">◎</div>
+            <div class="quick-title">Legal Research</div>
+            <div class="quick-desc">Ask natural language questions, retrieve precedents with citations from your corpus.</div>
+            <span class="quick-arrow">→</span>
+          </div>
+          <div class="quick-card" onclick="navigate('argument')">
+            <div class="quick-icon">◈</div>
+            <div class="quick-title">Argument Builder</div>
+            <div class="quick-desc">Enter case facts → auto-extract issues → generate structured IRAC arguments.</div>
+            <span class="quick-arrow">→</span>
+          </div>
+          <div class="quick-card" onclick="navigate('opposition')">
+            <div class="quick-icon">⇌</div>
+            <div class="quick-title">Opposition Engine</div>
+            <div class="quick-desc">Stress-test your case. Simulate adversarial arguments and identify weaknesses.</div>
+            <span class="quick-arrow">→</span>
+          </div>
+          <div class="quick-card" onclick="navigate('debate')">
+            <div class="quick-icon">⚖</div>
+            <div class="quick-title">Adversarial Debate</div>
+            <div class="quick-desc">Full plaintiff vs defense simulation with rebuttal and final strategy summary.</div>
+            <span class="quick-arrow">→</span>
+          </div>
+          <div class="quick-card">
+            <div class="quick-icon">📄</div>
+            <div class="quick-title">Upload Corpus</div>
+            <div class="quick-desc">Add new case PDFs to your knowledge base for improved retrieval accuracy.</div>
+            <span class="quick-arrow">→</span>
+          </div>
+          <div class="quick-card">
+            <div class="quick-icon">📊</div>
+            <div class="quick-title">Export Report</div>
+            <div class="quick-desc">Export your argument as a structured PDF report with all citations included.</div>
+            <span class="quick-arrow">→</span>
+          </div>
+        </div>
+
+        <!-- Recent Activity -->
+        <div class="card animate-in">
+          <div class="flex items-center justify-between mb-16">
+            <div>
+              <div class="card-title">Recent Activity</div>
+              <div class="card-sub">Your latest research sessions and argument drafts</div>
+            </div>
+            <button class="btn btn-ghost" style="font-size:12px;padding:6px 12px">View All</button>
+          </div>
+          <div class="activity-list">
+            <div class="activity-item">
+              <div class="activity-icon argument">◈</div>
+              <div class="activity-body">
+                <div class="activity-title">Sharma v. State of Maharashtra — Criminal Negligence</div>
+                <div class="activity-meta">Argument Builder · High Court, Bombay · 2h ago · 4 issues extracted</div>
+              </div>
+              <span class="activity-status status-done">Completed</span>
+            </div>
+            <div class="activity-item">
+              <div class="activity-icon research">◎</div>
+              <div class="activity-body">
+                <div class="activity-title">Contract Breach — Anticipatory Repudiation precedents</div>
+                <div class="activity-meta">Research Mode · Supreme Court of India · Yesterday · 12 citations found</div>
+              </div>
+              <span class="activity-status status-done">Completed</span>
+            </div>
+            <div class="activity-item">
+              <div class="activity-icon opposition">⇌</div>
+              <div class="activity-body">
+                <div class="activity-title">IP Infringement Opposition Simulation</div>
+                <div class="activity-meta">Opposition Engine · Delhi HC · 3 days ago · Risk: Moderate</div>
+              </div>
+              <span class="activity-status status-done">Completed</span>
+            </div>
+            <div class="activity-item">
+              <div class="activity-icon" style="background:rgba(201,168,76,0.12)">⚖</div>
+              <div class="activity-body">
+                <div class="activity-title">Employment Termination — Adversarial Debate Draft</div>
+                <div class="activity-meta">Debate Mode · NCLAT · 5 days ago · In progress</div>
+              </div>
+              <span class="activity-status status-running">In Progress</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ SCREEN: RESEARCH MODE ═══ -->
+    <div class="screen" id="screen-research">
+      <div class="page">
+        <div class="section-header animate-in">
+          <div class="section-eyebrow">Grounded RAG · Vector Search</div>
+          <div class="section-title">Legal Research Assistant</div>
+          <div class="section-sub">Ask any legal question. Answers are retrieved from your corpus and cited.</div>
+        </div>
+
+        <!-- Search Bar -->
+        <div class="search-bar animate-in">
+          <input class="search-input" type="text" id="research-query"
+            placeholder="e.g. What are the precedents for wrongful termination in India?" value="What precedents exist for anticipatory breach of contract under Indian law?"/>
+          <div style="display:flex;gap:8px;flex-shrink:0">
+            <select class="form-select" style="width:160px">
+              <option>All Jurisdictions</option>
+              <option>Supreme Court</option>
+              <option>High Court</option>
+              <option>NCLAT</option>
+              <option>District Court</option>
+            </select>
+            <select class="form-select" style="width:100px">
+              <option>All Years</option>
+              <option>2020–2025</option>
+              <option>2010–2020</option>
+              <option>Pre-2010</option>
+            </select>
+            <button class="btn btn-gold" onclick="showResearchResult()">Search</button>
+          </div>
+        </div>
+
+        <!-- Results area -->
+        <div id="research-results" class="animate-in">
+          <div class="grid-2" style="gap:20px;align-items:start">
+
+            <!-- Left: Answer -->
+            <div class="card">
+              <div class="card-title">Synthesized Answer</div>
+              <div class="card-sub">Generated from retrieved corpus — citation-backed</div>
+              <div style="font-size:14px;line-height:1.8;color:var(--cream-dim)">
+                Under Indian contract law, anticipatory breach occurs when a party to a contract indicates, before the time for performance arrives, that they will not or cannot perform their contractual obligations.
+                <span class="citation-tag">§ Hadley v Baxendale</span>
+
+                <br/><br/>
+                The Supreme Court in <strong style="color:var(--cream)">Saradamani Kandappan v. S. Rajalakshmi</strong>
+                <span class="citation-tag">CASE-041</span>
+                held that such repudiation entitles the aggrieved party to either accept the repudiation and sue for damages immediately, or affirm the contract and wait for actual breach.
+
+                <br/><br/>
+                The doctrine of anticipatory repudiation was further clarified in
+                <strong style="color:var(--cream)">Frost v. Knight</strong>
+                <span class="citation-tag">CASE-089</span>
+                where the court established the "election" principle — the innocent party's right to choose their remedy.
+              </div>
+
+              <div class="divider"></div>
+              <div class="flex items-center justify-between">
+                <div class="font-mono" style="font-size:10px;color:var(--green)">✓ 3 citations · High confidence</div>
+                <button class="btn btn-ghost" style="font-size:11px;padding:5px 10px">Copy Answer</button>
+              </div>
+            </div>
+
+            <!-- Right: Precedents -->
+            <div class="card">
+              <div class="card-title">Retrieved Precedents</div>
+              <div class="card-sub">Top matches by semantic similarity · Cosine score</div>
+              <div class="scroll-area">
+                <div class="precedent-item">
+                  <div class="precedent-rank">01</div>
+                  <div class="precedent-body">
+                    <div class="precedent-name">Saradamani Kandappan v. S. Rajalakshmi
+                      <span class="binding-tag binding">Binding</span>
+                    </div>
+                    <div class="precedent-meta">Supreme Court of India · 2011 · Score: 0.94</div>
+                    <div class="precedent-snippet">On anticipatory breach, the aggrieved party may either treat the contract as rescinded and sue for damages, or affirm the contract...</div>
+                  </div>
+                </div>
+                <div class="precedent-item">
+                  <div class="precedent-rank">02</div>
+                  <div class="precedent-body">
+                    <div class="precedent-name">Frost v. Knight
+                      <span class="binding-tag persuasive">Persuasive</span>
+                    </div>
+                    <div class="precedent-meta">UK House of Lords · 1872 · Score: 0.88</div>
+                    <div class="precedent-snippet">The innocent party has an election to immediately accept the repudiation or to keep the contract alive until performance is due...</div>
+                  </div>
+                </div>
+                <div class="precedent-item">
+                  <div class="precedent-rank">03</div>
+                  <div class="precedent-body">
+                    <div class="precedent-name">Universal Cargo Carriers v. Citati
+                      <span class="binding-tag persuasive">Persuasive</span>
+                    </div>
+                    <div class="precedent-meta">UK QBD · 1957 · Score: 0.81</div>
+                    <div class="precedent-snippet">A repudiation must be absolute and unequivocal — mere expression of difficulty in performance does not constitute anticipatory breach...</div>
+                  </div>
+                </div>
+                <div class="precedent-item">
+                  <div class="precedent-rank">04</div>
+                  <div class="precedent-body">
+                    <div class="precedent-name">Energy Watchdog v. CERC & Ors
+                      <span class="binding-tag binding">Binding</span>
+                    </div>
+                    <div class="precedent-meta">Supreme Court of India · 2017 · Score: 0.77</div>
+                    <div class="precedent-snippet">Section 39 of the Indian Contract Act, 1872 codifies the right to rescind a contract upon anticipatory repudiation by one party...</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ SCREEN: ARGUMENT BUILDER ═══ -->
+    <div class="screen" id="screen-argument">
+      <div class="page">
+        <div class="section-header animate-in">
+          <div class="section-eyebrow">IRAC Framework · Citation-Backed</div>
+          <div class="section-title">Argument Builder</div>
+          <div class="section-sub">Enter your case facts and generate a structured legal argument automatically.</div>
+        </div>
+
+        <!-- Pipeline Status -->
+        <div class="pipeline animate-in" id="arg-pipeline">
+          <div class="pipeline-step">
+            <div class="pipeline-dot done">✓</div>
+            <div class="pipeline-info">
+              <div class="pipeline-step-name">Facts Input</div>
+              <div class="pipeline-step-status">Complete</div>
+            </div>
+          </div>
+          <div class="pipeline-line"></div>
+          <div class="pipeline-step">
+            <div class="pipeline-dot done">✓</div>
+            <div class="pipeline-info">
+              <div class="pipeline-step-name">Issue Extraction</div>
+              <div class="pipeline-step-status">3 issues found</div>
+            </div>
+          </div>
+          <div class="pipeline-line"></div>
+          <div class="pipeline-step">
+            <div class="pipeline-dot done">✓</div>
+            <div class="pipeline-info">
+              <div class="pipeline-step-name">Retrieval</div>
+              <div class="pipeline-step-status">11 precedents</div>
+            </div>
+          </div>
+          <div class="pipeline-line"></div>
+          <div class="pipeline-step">
+            <div class="pipeline-dot active">4</div>
+            <div class="pipeline-info">
+              <div class="pipeline-step-name">IRAC Generation</div>
+              <div class="pipeline-step-status">In Progress...</div>
+            </div>
+          </div>
+          <div class="pipeline-line"></div>
+          <div class="pipeline-step">
+            <div class="pipeline-dot pending">5</div>
+            <div class="pipeline-info">
+              <div class="pipeline-step-name">Opposition</div>
+              <div class="pipeline-step-status">Pending</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Sub tabs -->
+        <div class="sub-tabs animate-in">
+          <div class="sub-tab active" onclick="switchSubTab(this, 'arg-input')">① Case Input</div>
+          <div class="sub-tab" onclick="switchSubTab(this, 'arg-output')">② IRAC Output</div>
+          <div class="sub-tab" onclick="switchSubTab(this, 'arg-precedents')">③ Precedents</div>
+        </div>
+
+        <!-- Tab: Input -->
+        <div id="arg-input" class="animate-in">
+          <div class="grid-2">
+            <div class="card">
+              <div class="card-title">Case Facts</div>
+              <div class="card-sub">Describe the facts of your case in plain language</div>
+              <div class="form-group">
+                <label class="form-label">Facts of the Case</label>
+                <textarea class="form-textarea" style="min-height:160px" placeholder="Enter the factual background of your case...">The plaintiff, a software engineer, entered into an employment contract with the defendant company on 1 Jan 2023 for a fixed term of 2 years. On 15 Aug 2023, the company terminated the plaintiff without cause, citing restructuring. The plaintiff was not given notice or severance as per contract terms...</textarea>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Jurisdiction</label>
+                <select class="form-select">
+                  <option>High Court of Delhi</option>
+                  <option>Supreme Court of India</option>
+                  <option>High Court of Bombay</option>
+                  <option>NCLAT</option>
+                </select>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-title">Case Configuration</div>
+              <div class="card-sub">Optional settings for focused retrieval</div>
+              <div class="form-group">
+                <label class="form-label">Area of Law</label>
+                <select class="form-select">
+                  <option>Employment Law</option>
+                  <option>Contract Law</option>
+                  <option>Constitutional Law</option>
+                  <option>Criminal Law</option>
+                  <option>IP Law</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Client Position</label>
+                <select class="form-select">
+                  <option>Plaintiff / Petitioner</option>
+                  <option>Defendant / Respondent</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Year Range for Precedents</label>
+                <select class="form-select">
+                  <option>All Years</option>
+                  <option>2015–2025</option>
+                  <option>2000–2025</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Additional Legal Questions (Optional)</label>
+                <textarea class="form-textarea" style="min-height:80px" placeholder="e.g. Does the employer's restructuring justify breach of fixed-term contract?"></textarea>
+              </div>
+              <button class="btn btn-gold" style="width:100%" onclick="showArgOutput()">
+                ◈ Generate IRAC Argument
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab: Output -->
+        <div id="arg-output" style="display:none">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+            <div>
+              <div class="font-mono" style="font-size:10px;color:var(--gold);letter-spacing:0.15em;text-transform:uppercase;margin-bottom:4px">Issue 1 of 3 · Employment Law</div>
+              <div style="font-family:'Cormorant Garamond',serif;font-size:20px;font-weight:600;color:var(--cream)">Wrongful Termination of Fixed-Term Contract</div>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center">
+              <span class="risk-badge risk-low">◯ Strong Argument</span>
+              <button class="btn btn-ghost" style="font-size:12px;padding:7px 12px">← Prev Issue</button>
+              <button class="btn btn-gold" style="font-size:12px;padding:7px 12px">Next Issue →</button>
+            </div>
+          </div>
+
+          <!-- IRAC Blocks -->
+          <div class="irac-block animate-in">
+            <div class="irac-header">
+              <div class="irac-letter">I</div>
+              <div>
+                <div class="irac-label">Issue</div>
+                <div class="irac-heading">What is the central legal question?</div>
+              </div>
+            </div>
+            <div class="irac-body">
+              Whether the defendant company's termination of the plaintiff's fixed-term employment contract prior to its expiry, without cause, notice, or severance payment, constitutes wrongful termination and breach of contract entitling the plaintiff to damages under Section 73 of the Indian Contract Act, 1872.
+            </div>
+          </div>
+
+          <div class="irac-block animate-in">
+            <div class="irac-header">
+              <div class="irac-letter">R</div>
+              <div>
+                <div class="irac-label">Rule</div>
+                <div class="irac-heading">Applicable law and precedents</div>
+              </div>
+            </div>
+            <div class="irac-body">
+              Under Section 73 of the Indian Contract Act, 1872, a party who suffers by reason of breach of a contract is entitled to receive compensation for any loss or damage caused to him thereby. <span class="citation-tag">§ ICA §73</span>
+
+              <br/><br/>
+              The Supreme Court in <strong style="color:var(--cream)">DTC v. DTC Mazdoor Congress</strong> <span class="citation-tag">CASE-112</span> held that fixed-term employees cannot be terminated before the term expires without lawful cause or contractual provision allowing such termination.
+
+              <br/><br/>
+              Further, in <strong style="color:var(--cream)">State of Punjab v. Anoop Kumar Tiwari</strong> <span class="citation-tag">CASE-078</span>, it was established that corporate restructuring does not automatically constitute a lawful ground for early termination of a fixed-term contract unless expressly provided therein.
+            </div>
+          </div>
+
+          <div class="irac-block animate-in">
+            <div class="irac-header">
+              <div class="irac-letter">A</div>
+              <div>
+                <div class="irac-label">Application</div>
+                <div class="irac-heading">Applying law to the facts</div>
+              </div>
+            </div>
+            <div class="irac-body">
+              Applying the above rules to the present case: the plaintiff's contract was for a fixed term of 2 years commencing 1 January 2023, with no express termination clause permitting early exit due to restructuring. The defendant's termination on 15 August 2023 — a mere 7.5 months into the term — was without cause, without notice, and without severance.
+
+              <br/><br/>
+              The defendant's reliance on "restructuring" does not satisfy the threshold established in <em>Anoop Kumar Tiwari</em> <span class="citation-tag">CASE-078</span>, as that ground was not a term of the contract. The failure to provide notice and severance further compounds the breach and entitles the plaintiff to expectation damages for the remaining 16.5 months of the contract.
+            </div>
+          </div>
+
+          <div class="irac-block animate-in">
+            <div class="irac-header">
+              <div class="irac-letter">C</div>
+              <div>
+                <div class="irac-label">Conclusion</div>
+                <div class="irac-heading">Summary and remedy</div>
+              </div>
+            </div>
+            <div class="irac-body">
+              <strong style="color:var(--cream)">The plaintiff is entitled to succeed on this issue.</strong> The defendant's early termination constitutes a wrongful breach of a fixed-term employment contract. The plaintiff is entitled to claim expectation damages equivalent to the remaining salary and benefits for 16.5 months, plus any consequential losses proved at trial, subject to the duty to mitigate.
+            </div>
+          </div>
+
+          <div style="display:flex;gap:10px;margin-top:8px">
+            <button class="btn btn-ghost">⇌ Generate Opposition</button>
+            <button class="btn btn-ghost">📄 Export as PDF</button>
+            <button class="btn btn-gold" onclick="navigate('opposition')">Run Opposition Engine →</button>
+          </div>
+        </div>
+
+        <!-- Tab: Precedents (shown inline) -->
+        <div id="arg-precedents" style="display:none">
+          <div class="card animate-in">
+            <div class="card-title">Retrieved Precedents</div>
+            <div class="card-sub">11 precedents retrieved across 3 legal issues — ordered by relevance</div>
+            <div class="precedent-item">
+              <div class="precedent-rank">01</div>
+              <div class="precedent-body">
+                <div class="precedent-name">DTC v. DTC Mazdoor Congress <span class="binding-tag binding">Binding</span></div>
+                <div class="precedent-meta">Supreme Court of India · 1991 · Relevance: 0.96 · Issue #1</div>
+                <div class="precedent-snippet">Fixed-term employees cannot be removed prematurely without lawful cause or explicit contractual authority. Early termination without cause entitles the employee to damages for the unexpired term.</div>
+              </div>
+            </div>
+            <div class="precedent-item">
+              <div class="precedent-rank">02</div>
+              <div class="precedent-body">
+                <div class="precedent-name">State of Punjab v. Anoop Kumar Tiwari <span class="binding-tag binding">Binding</span></div>
+                <div class="precedent-meta">Supreme Court of India · 2007 · Relevance: 0.91 · Issue #1</div>
+                <div class="precedent-snippet">Corporate restructuring does not, by itself, constitute a valid basis for early termination unless the contract contains an express restructuring clause. Courts will interpret such clauses narrowly.</div>
+              </div>
+            </div>
+            <div class="precedent-item">
+              <div class="precedent-rank">03</div>
+              <div class="precedent-body">
+                <div class="precedent-name">Zubair Ahmed v. BSES Rajdhani <span class="binding-tag binding">Binding</span></div>
+                <div class="precedent-meta">Delhi High Court · 2018 · Relevance: 0.87 · Issue #2</div>
+                <div class="precedent-snippet">Notice period obligations survive even in cases of constructive dismissal. Failure to pay in lieu of notice constitutes an independent actionable breach.</div>
+              </div>
+            </div>
+            <div class="precedent-item">
+              <div class="precedent-rank">04</div>
+              <div class="precedent-body">
+                <div class="precedent-name">Hadley v. Baxendale <span class="binding-tag persuasive">Persuasive</span></div>
+                <div class="precedent-meta">UK Exchequer Court · 1854 · Relevance: 0.82 · Issue #3</div>
+                <div class="precedent-snippet">Damages for breach of contract are limited to those that were in the reasonable contemplation of the parties at the time of contracting as a probable result of breach.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ SCREEN: OPPOSITION ENGINE ═══ -->
+    <div class="screen" id="screen-opposition">
+      <div class="page">
+        <div class="section-header animate-in">
+          <div class="section-eyebrow">Adversarial AI · Weakness Detection</div>
+          <div class="section-title">Opposition Simulation Engine</div>
+          <div class="section-sub">Identify vulnerabilities in your argument. Generate structured counter-arguments with risk assessment.</div>
+        </div>
+
+        <!-- Input -->
+        <div class="card animate-in mb-24">
+          <div class="card-title">Argument to Challenge</div>
+          <div class="card-sub">Paste your argument or load from Argument Builder</div>
+          <div class="form-group">
+            <label class="form-label">Your Argument (IRAC or free text)</label>
+            <textarea class="form-textarea" style="min-height:100px">The defendant's termination of the plaintiff's fixed-term contract prior to expiry, without cause and without notice, constitutes wrongful termination under S.73 of the Indian Contract Act. The plaintiff is entitled to expectation damages for 16.5 months of unexpired term.</textarea>
+          </div>
+          <div class="flex gap-8">
+            <button class="btn btn-gold" onclick="showOppositionResult()">⇌ Simulate Opposition</button>
+            <button class="btn btn-ghost">Load from Builder</button>
+          </div>
+        </div>
+
+        <!-- Results -->
+        <div id="opp-results" class="animate-in">
+          <!-- Risk Summary -->
+          <div class="card mb-24">
+            <div class="flex items-center justify-between mb-16">
+              <div>
+                <div class="card-title">Overall Risk Assessment</div>
+                <div class="card-sub">Based on precedent weight and argument strength analysis</div>
+              </div>
+              <span class="risk-badge risk-moderate">⚠ Moderate Risk</span>
+            </div>
+            <div class="stat-row" style="margin-bottom:0">
+              <div class="stat-chip">
+                <div class="stat-value" style="font-size:20px;color:#fbbf24">3</div>
+                <div class="stat-label">Weaknesses Found</div>
+              </div>
+              <div class="stat-chip">
+                <div class="stat-value" style="font-size:20px;color:#f87171">1</div>
+                <div class="stat-label">High Risk Points</div>
+              </div>
+              <div class="stat-chip">
+                <div class="stat-value" style="font-size:20px;color:#4ade80">2</div>
+                <div class="stat-label">Contrary Precedents</div>
+              </div>
+              <div class="stat-chip">
+                <div class="stat-value" style="font-size:20px;color:var(--gold-light)">67%</div>
+                <div class="stat-label">Argument Confidence</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid-2">
+            <!-- Weaknesses -->
+            <div class="card">
+              <div class="card-title">Identified Weaknesses</div>
+              <div class="card-sub">Vulnerabilities the opposing counsel will likely exploit</div>
+              <div class="weakness-item">
+                <div class="weakness-num">W1</div>
+                <div>
+                  <div style="font-size:12px;font-family:'DM Mono',monospace;color:#f87171;margin-bottom:4px">HIGH RISK</div>
+                  <div class="weakness-text">The plaintiff's <strong style="color:var(--cream)">duty to mitigate</strong> may significantly reduce quantum of damages. If the plaintiff secured alternate employment within the 16.5-month period, expectation damages will be reduced proportionally.</div>
+                </div>
+              </div>
+              <div class="weakness-item" style="border-color:rgba(217,119,6,0.18);background:rgba(217,119,6,0.06)">
+                <div class="weakness-num" style="color:#fbbf24">W2</div>
+                <div>
+                  <div style="font-size:12px;font-family:'DM Mono',monospace;color:#fbbf24;margin-bottom:4px">MODERATE RISK</div>
+                  <div class="weakness-text">The <strong style="color:var(--cream)">implied term of good faith</strong> may not be recognized under Indian contract law as broadly as in common law jurisdictions, weakening any good faith-based arguments.</div>
+                </div>
+              </div>
+              <div class="weakness-item" style="border-color:rgba(217,119,6,0.18);background:rgba(217,119,6,0.06)">
+                <div class="weakness-num" style="color:#fbbf24">W3</div>
+                <div>
+                  <div style="font-size:12px;font-family:'DM Mono',monospace;color:#fbbf24;margin-bottom:4px">MODERATE RISK</div>
+                  <div class="weakness-text">If the contract contained a <strong style="color:var(--cream)">force majeure or restructuring clause</strong>, even broadly worded, the defendant may argue it provides authority for early termination.</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Counter-argument -->
+            <div class="card">
+              <div class="card-title">Defense Counter-Argument</div>
+              <div class="card-sub">Anticipated opposing counsel's structured response</div>
+
+              <div class="irac-block" style="margin-bottom:14px">
+                <div class="irac-header">
+                  <div class="irac-letter" style="font-size:18px;width:22px;color:#f87171">⇌</div>
+                  <div>
+                    <div class="irac-label" style="color:#c45c5c">Counter — Mitigation of Loss</div>
+                    <div class="irac-heading">Defendant's Primary Rebuttal</div>
+                  </div>
+                </div>
+                <div class="irac-body" style="font-size:13px">
+                  The plaintiff has a legal duty to mitigate their losses following termination. <span class="citation-tag">§ ICA §73</span> expressly provides that compensation is not awarded for loss that the claimant could have avoided by reasonable steps. The defendant will adduce evidence that the plaintiff failed to actively seek alternate employment for an unreasonable period, thereby inflating their claimed damages.
+                  <br/><br/>
+                  Further, the existence of an implied restructuring authorization <span class="citation-tag">CASE-203</span> within the employment terms may justify the early termination under the industrial relations framework.
+                </div>
+              </div>
+
+              <div>
+                <div class="font-mono" style="font-size:10px;color:var(--gold);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.1em">Contrary Precedents</div>
+                <div class="precedent-item" style="padding:10px 0">
+                  <div class="precedent-rank">→</div>
+                  <div class="precedent-body">
+                    <div class="precedent-name" style="font-size:12.5px">Kamal Kishore v. Mahindra & Mahindra <span class="binding-tag persuasive">Persuasive</span></div>
+                    <div class="precedent-meta">Bombay HC · 2015</div>
+                    <div class="precedent-snippet" style="font-size:11.5px">Court upheld early termination where internal restructuring caused genuine role elimination, limiting damages to 3 months' pay.</div>
+                  </div>
+                </div>
+                <div class="precedent-item" style="padding:10px 0">
+                  <div class="precedent-rank">→</div>
+                  <div class="precedent-body">
+                    <div class="precedent-name" style="font-size:12.5px">ABC Corp v. Rajan Mehta <span class="binding-tag persuasive">Persuasive</span></div>
+                    <div class="precedent-meta">NCLAT · 2019</div>
+                    <div class="precedent-snippet" style="font-size:11.5px">Damages were reduced by 40% due to the plaintiff's failure to demonstrate active mitigation efforts within 3 months of termination.</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Strategy Recommendations -->
+          <div class="card mt-24">
+            <div class="card-title">Strategy Recommendations</div>
+            <div class="card-sub">How to strengthen your argument against anticipated opposition</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-top:4px">
+              <div style="background:rgba(22,163,74,0.07);border:1px solid rgba(22,163,74,0.2);border-radius:10px;padding:14px">
+                <div style="font-family:'DM Mono',monospace;font-size:10px;color:#4ade80;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.1em">✓ Do This</div>
+                <div style="font-size:13px;color:var(--cream-dim);line-height:1.6">Document the plaintiff's active job search efforts post-termination. Prepare a mitigation log showing dates and applications submitted.</div>
+              </div>
+              <div style="background:rgba(22,163,74,0.07);border:1px solid rgba(22,163,74,0.2);border-radius:10px;padding:14px">
+                <div style="font-family:'DM Mono',monospace;font-size:10px;color:#4ade80;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.1em">✓ Do This</div>
+                <div style="font-size:13px;color:var(--cream-dim);line-height:1.6">Review the original contract for any restructuring clause. If absent, draft a submission that the implied power doctrine does not apply.</div>
+              </div>
+              <div style="background:rgba(192,57,43,0.06);border:1px solid rgba(192,57,43,0.18);border-radius:10px;padding:14px">
+                <div style="font-family:'DM Mono',monospace;font-size:10px;color:#f87171;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.1em">⚠ Avoid</div>
+                <div style="font-size:13px;color:var(--cream-dim);line-height:1.6">Do not over-claim damages without evidence. Courts will reduce quantum even in clear breach cases if mitigation is not adequately proved.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ SCREEN: DEBATE MODE ═══ -->
+    <div class="screen" id="screen-debate">
+      <div class="page">
+        <div class="section-header animate-in">
+          <div class="section-eyebrow">Full Adversarial Simulation</div>
+          <div class="section-title">Adversarial Debate Mode</div>
+          <div class="section-sub">Stress-test your litigation strategy with plaintiff vs defense simulation and full rebuttal round.</div>
+        </div>
+
+        <!-- Config -->
+        <div class="card animate-in mb-24">
+          <div class="grid-2">
+            <div>
+              <div class="card-title">Debate Configuration</div>
+              <div class="card-sub">Set the case context for adversarial simulation</div>
+              <div class="form-group">
+                <label class="form-label">Case Summary</label>
+                <textarea class="form-textarea" style="min-height:80px">Employment termination dispute — Plaintiff claims wrongful early termination of fixed-term contract. Defendant claims restructuring necessitated role elimination.</textarea>
+              </div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:14px">
+              <div class="form-group" style="margin:0">
+                <label class="form-label">Jurisdiction</label>
+                <select class="form-select">
+                  <option>High Court of Delhi</option>
+                </select>
+              </div>
+              <div class="form-group" style="margin:0">
+                <label class="form-label">Debate Rounds</label>
+                <select class="form-select">
+                  <option>2 Rounds (Opening + Rebuttal)</option>
+                  <option>3 Rounds (Full)</option>
+                </select>
+              </div>
+              <button class="btn btn-gold" style="width:100%;margin-top:auto">⚖ Run Full Debate Simulation</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ROUND 1 -->
+        <div class="animate-in">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+            <div style="font-family:'DM Mono',monospace;font-size:10px;letter-spacing:0.15em;text-transform:uppercase;color:var(--muted)">Round 1</div>
+            <div style="flex:1;height:1px;background:var(--navy-border)"></div>
+            <div style="font-family:'Cormorant Garamond',serif;font-size:14px;color:var(--gold);font-style:italic">Opening Arguments</div>
+          </div>
+          <div class="debate-grid mb-24">
+            <div class="debate-col plaintiff-col card" style="padding:0">
+              <div class="debate-col-header">⚖ PLAINTIFF / PETITIONER</div>
+              <div class="debate-body">
+                <div class="debate-point">
+                  The plaintiff entered a fixed-term contract of 2 years. Under settled law, such contracts cannot be terminated before expiry without lawful cause. <span class="citation-tag">CASE-112</span>
+                </div>
+                <div class="debate-point">
+                  "Restructuring" was not a ground for termination in the contract, and courts have consistently held that such grounds must be expressly stated. <span class="citation-tag">CASE-078</span>
+                </div>
+                <div class="debate-point">
+                  The failure to provide notice or severance as per contract terms constitutes an independent and additional breach, entitling the plaintiff to additional damages.
+                </div>
+              </div>
+            </div>
+            <div class="debate-vs">vs</div>
+            <div class="debate-col defense-col card" style="padding:0">
+              <div class="debate-col-header">⚔ DEFENSE / RESPONDENT</div>
+              <div class="debate-body">
+                <div class="debate-point">
+                  The termination was necessitated by genuine corporate restructuring — a recognized legitimate business need that courts have upheld as sufficient justification. <span class="citation-tag">CASE-203</span>
+                </div>
+                <div class="debate-point">
+                  The plaintiff has a legal duty to mitigate their loss. Evidence will show the plaintiff failed to make reasonable efforts to seek alternate employment, thereby artificially inflating damages claimed.
+                </div>
+                <div class="debate-point">
+                  The severance arrangements offered — though disputed — met the minimum statutory requirements under applicable labour regulations, discharging the employer's obligation.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ROUND 2 -->
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+            <div style="font-family:'DM Mono',monospace;font-size:10px;letter-spacing:0.15em;text-transform:uppercase;color:var(--muted)">Round 2</div>
+            <div style="flex:1;height:1px;background:var(--navy-border)"></div>
+            <div style="font-family:'Cormorant Garamond',serif;font-size:14px;color:var(--gold);font-style:italic">Rebuttal</div>
+          </div>
+          <div class="debate-grid mb-24">
+            <div class="debate-col plaintiff-col card" style="padding:0">
+              <div class="debate-col-header">⚖ PLAINTIFF REBUTTAL</div>
+              <div class="debate-body">
+                <div class="debate-point">
+                  The defendant's claim of "genuine restructuring" is not supported by any documentary evidence produced. The restructuring allegation is unsubstantiated.
+                </div>
+                <div class="debate-point">
+                  The plaintiff's mitigation is established — documentation of 27 job applications submitted within 60 days of termination will be adduced. Active mitigation was carried out in good faith.
+                </div>
+              </div>
+            </div>
+            <div class="debate-vs">vs</div>
+            <div class="debate-col defense-col card" style="padding:0">
+              <div class="debate-col-header">⚔ DEFENSE REBUTTAL</div>
+              <div class="debate-body">
+                <div class="debate-point">
+                  The restructuring board resolution dated 10 Aug 2023 — pre-dating the termination — will be produced demonstrating the business decision was genuine and pre-planned.
+                </div>
+                <div class="debate-point">
+                  The plaintiff secured new employment by November 2023 — within 2.5 months — substantially reducing the loss period from the claimed 16.5 months to approximately 3.5 months.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Final Strategy Summary -->
+          <div class="card" style="border-color:rgba(201,168,76,0.3);background:rgba(201,168,76,0.04)">
+            <div class="flex items-center gap-8 mb-16">
+              <div style="font-size:18px">⭐</div>
+              <div>
+                <div class="card-title text-gold">Final Strategy Summary</div>
+                <div class="card-sub">AI-generated litigation strategy recommendation</div>
+              </div>
+              <span class="risk-badge risk-moderate" style="margin-left:auto">Overall: Moderate Risk</span>
+            </div>
+            <div style="font-size:14px;line-height:1.8;color:var(--cream-dim);margin-bottom:16px">
+              <strong style="color:var(--cream)">Plaintiff's position is legally sound but commercially challenged.</strong> The core wrongful termination claim is well-grounded in precedent. However, the defendant's early-mitigation argument — that plaintiff secured employment in 2.5 months — significantly reduces quantum.
+              <br/><br/>
+              <strong style="color:var(--cream)">Strategic recommendation:</strong> Settle on liability, contest quantum. Seek an admission on the fact of wrongful termination, then negotiate damages factoring the actual unemployment period (3.5 months) plus a premium for breach. Avoid trial on quantum where the mitigation evidence is unfavorable.
+            </div>
+            <div style="display:flex;gap:10px">
+              <button class="btn btn-gold">📄 Export Full Report</button>
+              <button class="btn btn-ghost">↩ Refine Arguments</button>
+              <button class="btn btn-ghost">⇌ Run Opposition Check</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+
+<script>
+  // ─── CONFIG ───────────────────────────────────────────
+  const API_BASE = "http://localhost:8000";
+
+  // ─── NAVIGATION ───────────────────────────────────────
+  function navigate(screen) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    const target = document.getElementById('screen-' + screen);
+    if (target) {
+      target.classList.add('active');
+      target.querySelectorAll('.animate-in').forEach((el, i) => {
+        el.style.animation = 'none';
+        el.offsetHeight;
+        el.style.animation = '';
+        el.style.animationDelay = (i * 0.07) + 's';
+      });
+    }
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    const titles = {
+      dashboard:  'Dashboard',
+      research:   'Legal Research Assistant',
+      argument:   'Argument Builder',
+      opposition: 'Opposition Simulation Engine',
+      debate:     'Adversarial Debate Mode'
+    };
+    document.getElementById('topbar-title').textContent = titles[screen] || screen;
+    const navMap = { dashboard:0, research:1, argument:2, opposition:3, debate:4 };
+    const navItems = document.querySelectorAll('.sidebar .nav-item');
+    if (navMap[screen] !== undefined && navItems[navMap[screen]]) {
+      navItems[navMap[screen]].classList.add('active');
+    }
+  }
+
+  // ─── SUB TABS ─────────────────────────────────────────
+  function switchSubTab(el, target) {
+    const parent = el.closest('.page') || document;
+    parent.querySelectorAll('.sub-tab').forEach(t => t.classList.remove('active'));
+    el.classList.add('active');
+    ['arg-input','arg-output','arg-precedents'].forEach(t => {
+      const e = document.getElementById(t);
+      if (e) e.style.display = 'none';
+    });
+    const targetEl = document.getElementById(target);
+    if (targetEl) targetEl.style.display = 'block';
+  }
+
+  // ─── LOADING HELPERS ──────────────────────────────────
+  function setLoading(btn, text) {
+    btn.disabled = true;
+    btn.dataset.original = btn.innerHTML;
+    btn.innerHTML = `<span class="loading-dot"></span>
+                     <span class="loading-dot"></span>
+                     <span class="loading-dot"></span> ${text}`;
+  }
+  function clearLoading(btn) {
+    btn.disabled = false;
+    btn.innerHTML = btn.dataset.original;
+  }
+
+  // ─── RENDER PRECEDENTS ────────────────────────────────
+  function renderPrecedents(precedents) {
+    return precedents.map((p, i) => `
+      <div class="precedent-item">
+        <div class="precedent-rank">0${i + 1}</div>
+        <div class="precedent-body">
+          <div class="precedent-name">
+            ${p.case_name}
+            <span class="binding-tag ${p.binding === 'Binding' ? 'binding' : 'persuasive'}">
+              ${p.binding}
+            </span>
+          </div>
+          <div class="precedent-meta">
+            ${p.court} · ${p.year} · Score: ${p.score}
+          </div>
+          <div class="precedent-snippet">${p.snippet}</div>
+        </div>
+      </div>`).join('');
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // RESEARCH MODE  →  POST /api/research
+  // ═══════════════════════════════════════════════════════
+  async function showResearchResult() {
+    const query = document.getElementById('research-query').value.trim();
+    const btn   = document.querySelector('#screen-research .btn-gold');
+    const area  = document.getElementById('research-results');
+
+    if (!query) { alert('Please enter a legal question'); return; }
+
+    setLoading(btn, 'Searching...');
+    area.style.display = 'block';
+    area.innerHTML = `
+      <div class="generating-state visible">
+        <div class="generating-icon">⚖</div>
+        <div class="generating-title">Searching your corpus...</div>
+        <div class="generating-desc">Retrieving relevant cases and generating cited answer</div>
+      </div>`;
+
+    try {
+      const res  = await fetch(`${API_BASE}/api/research`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ query, top_k: 4 })
+      });
+      if (!res.ok) throw new Error(`Server error ${res.status}`);
+      const data = await res.json();
+
+      area.innerHTML = `
+        <div class="grid-2" style="gap:20px;align-items:start">
+
+          <div class="card animate-in">
+            <div class="card-title">Synthesized Answer</div>
+            <div class="card-sub">Generated from ${data.total_sources} retrieved cases — citation-backed</div>
+            <div class="answer-body" style="font-size:14px;line-height:1.8;color:var(--cream-dim)">
+              ${marked.parse(
+                data.answer.replace(/\[SOURCE (\d+)\]/g,
+                  '<span class="citation-tag">SOURCE $1</span>')
+              )}
+            </div>
+            <div class="divider"></div>
+            <div class="flex items-center justify-between">
+              <div class="font-mono" style="font-size:10px;color:var(--green)">
+                ✓ ${data.total_sources} sources · RAG retrieval
+              </div>
+              <button class="btn btn-ghost" style="font-size:11px;padding:5px 10px"
+                onclick="navigator.clipboard.writeText(this.closest('.card').querySelector('[style*=cream-dim]')?.innerText || '')">
+                Copy Answer
+              </button>
+            </div>
+          </div>
+
+          <div class="card animate-in">
+            <div class="card-title">Retrieved Precedents</div>
+            <div class="card-sub">Top matches by semantic similarity · Cosine score</div>
+            <div class="scroll-area">
+              ${renderPrecedents(data.precedents)}
+            </div>
+          </div>
+
+        </div>`;
+
+    } catch (err) {
+      area.innerHTML = `
+        <div class="card" style="border-color:rgba(192,57,43,0.3)">
+          <div class="card-title" style="color:#f87171">❌ Error</div>
+          <div class="card-sub">${err.message}</div>
+          <div style="font-size:13px;color:var(--muted);margin-top:8px">
+            Make sure your backend is running: <code>python main.py</code>
+          </div>
+        </div>`;
+    } finally {
+      clearLoading(btn);
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // ARGUMENT BUILDER  →  POST /api/argument
+  // ═══════════════════════════════════════════════════════
+  async function showArgOutput() {
+    const factsEl = document.querySelector('#arg-input textarea');
+    const selectEl = document.querySelector('#arg-input select');
+    const btn = document.querySelector('#arg-input .btn-gold');
+
+    const facts = factsEl ? factsEl.value.trim() : '';
+    const jurisdiction = selectEl ? selectEl.value : 'High Court of Delhi';
+
+    if (!facts) { alert('Please enter case facts'); return; }
+
+    // Switch to output tab
+    document.querySelectorAll('.sub-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.sub-tab')[1].classList.add('active');
+    document.getElementById('arg-input').style.display = 'none';
+    document.getElementById('arg-output').style.display = 'block';
+    document.getElementById('arg-precedents').style.display = 'none';
+
+    document.getElementById('arg-output').innerHTML = `
+      <div class="generating-state visible">
+        <div class="generating-icon">◈</div>
+        <div class="generating-title">Building IRAC Arguments...</div>
+        <div class="generating-desc">Extracting issues → Retrieving precedents → Generating IRAC</div>
+      </div>`;
+
+    setLoading(btn, 'Generating...');
+
+    try {
+      const res  = await fetch(`${API_BASE}/api/argument`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({
+          facts,
+          jurisdiction,
+          area_of_law:     'General',
+          client_position: 'Plaintiff'
+        })
+      });
+      if (!res.ok) throw new Error(`Server error ${res.status}`);
+      const data = await res.json();
+
+      let html = `
+        <div style="margin-bottom:20px">
+          <div class="font-mono" style="font-size:10px;color:var(--gold);
+               letter-spacing:0.15em;text-transform:uppercase;margin-bottom:4px">
+            ${data.total_issues} Legal Issue${data.total_issues !== 1 ? 's' : ''} · ${data.jurisdiction}
+          </div>
+          <div style="font-family:'Cormorant Garamond',serif;font-size:20px;
+               font-weight:600;color:var(--cream)">IRAC Arguments Generated</div>
+        </div>`;
+
+      data.arguments.forEach((arg, idx) => {
+        const irac = arg.irac;
+        const riskClass = arg.priority === 'high' ? 'risk-high'
+                        : arg.priority === 'medium' ? 'risk-moderate' : 'risk-low';
+        html += `
+          <div style="margin-bottom:36px">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+              <div>
+                <div class="font-mono" style="font-size:10px;color:var(--gold);
+                     letter-spacing:0.15em;text-transform:uppercase;margin-bottom:4px">
+                  Issue ${idx+1} of ${data.total_issues} · ${arg.area_of_law}
+                </div>
+                <div style="font-family:'Cormorant Garamond',serif;font-size:18px;
+                     font-weight:600;color:var(--cream)">${arg.issue_title}</div>
+              </div>
+              <span class="risk-badge ${riskClass}">${arg.priority.toUpperCase()} PRIORITY</span>
+            </div>
+
+            <div class="irac-block animate-in">
+              <div class="irac-header">
+                <div class="irac-letter">I</div>
+                <div><div class="irac-label">Issue</div>
+                     <div class="irac-heading">Central legal question</div></div>
+              </div>
+              <div class="irac-body">${irac.issue || '—'}</div>
+            </div>
+
+            <div class="irac-block animate-in">
+              <div class="irac-header">
+                <div class="irac-letter">R</div>
+                <div><div class="irac-label">Rule</div>
+                     <div class="irac-heading">Applicable law and precedents</div></div>
+              </div>
+              <div class="irac-body">${irac.rule || '—'}</div>
+            </div>
+
+            <div class="irac-block animate-in">
+              <div class="irac-header">
+                <div class="irac-letter">A</div>
+                <div><div class="irac-label">Application</div>
+                     <div class="irac-heading">Applying law to the facts</div></div>
+              </div>
+              <div class="irac-body">${irac.application || '—'}</div>
+            </div>
+
+            <div class="irac-block animate-in">
+              <div class="irac-header">
+                <div class="irac-letter">C</div>
+                <div><div class="irac-label">Conclusion</div>
+                     <div class="irac-heading">Summary and remedy</div></div>
+              </div>
+              <div class="irac-body">${irac.conclusion || '—'}</div>
+            </div>
+
+            <div style="font-size:12px;color:var(--muted);margin-top:10px">
+              📚 Cases used: ${arg.precedents.map(p =>
+                `<span class="citation-tag">${p.case_name}</span>`).join(' ')}
+            </div>
+          </div>`;
+      });
+
+      html += `
+        <div style="display:flex;gap:10px;margin-top:8px">
+          <button class="btn btn-ghost" onclick="navigate('opposition')">⇌ Run Opposition Engine</button>
+          <button class="btn btn-gold"  onclick="navigate('opposition')">Test Against Opposition →</button>
+        </div>`;
+
+      document.getElementById('arg-output').innerHTML = html;
+
+      // Mark pipeline all done
+      document.querySelectorAll('#arg-pipeline .pipeline-dot').forEach(d => {
+        d.classList.remove('active','pending');
+        d.classList.add('done');
+        d.textContent = '✓';
+      });
+      document.querySelectorAll('#arg-pipeline .pipeline-step-status').forEach((s, i) => {
+        s.textContent = ['Complete',`${data.total_issues} issues found`,
+          'Precedents retrieved','Generated','Available'][i] || 'Done';
+      });
+
+    } catch (err) {
+      document.getElementById('arg-output').innerHTML = `
+        <div class="card" style="border-color:rgba(192,57,43,0.3)">
+          <div class="card-title" style="color:#f87171">❌ Error</div>
+          <div class="card-sub">${err.message}</div>
+        </div>`;
+    } finally {
+      clearLoading(btn);
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // OPPOSITION ENGINE  →  POST /api/opposition
+  // ═══════════════════════════════════════════════════════
+  async function showOppositionResult() {
+    const argument = document.querySelector('#screen-opposition textarea').value.trim();
+    const btn      = document.querySelector('#screen-opposition .btn-gold');
+    const area     = document.getElementById('opp-results');
+
+    if (!argument) { alert('Please enter an argument to challenge'); return; }
+
+    setLoading(btn, 'Simulating...');
+    area.style.display = 'block';
+    area.innerHTML = `
+      <div class="generating-state visible">
+        <div class="generating-icon">⇌</div>
+        <div class="generating-title">Simulating Opposition...</div>
+        <div class="generating-desc">Finding weaknesses and generating counter-arguments</div>
+      </div>`;
+
+    try {
+      const res  = await fetch(`${API_BASE}/api/opposition`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ argument })
+      });
+      if (!res.ok) throw new Error(`Server error ${res.status}`);
+      const data     = await res.json();
+      const analysis = data.analysis;
+
+      const riskClass = { HIGH:'risk-high', MODERATE:'risk-moderate', LOW:'risk-low' }
+                        [analysis.risk_level] || 'risk-moderate';
+
+      const weaknessesHtml = (analysis.weaknesses || []).map(w => `
+        <div class="weakness-item" style="${w.severity !== 'HIGH' ?
+          'border-color:rgba(217,119,6,0.18);background:rgba(217,119,6,0.06)' : ''}">
+          <div class="weakness-num" style="color:${w.severity==='HIGH'?'#f87171':'#fbbf24'}">
+            ${w.id}
+          </div>
+          <div>
+            <div style="font-size:12px;font-family:'DM Mono',monospace;margin-bottom:4px;
+                 color:${w.severity==='HIGH'?'#f87171':'#fbbf24'}">
+              ${w.severity} RISK
+            </div>
+            <div class="weakness-text">${w.description}</div>
+          </div>
+        </div>`).join('');
+
+      const counterHtml = (analysis.counter_arguments || []).map(c => `
+        <div class="debate-point">${c.point}
+          ${c.source ? `<span class="citation-tag">${c.source}</span>` : ''}
+        </div>`).join('');
+
+      const strategyHtml = (analysis.strategy_recommendations || []).map(s => `
+        <div style="background:${s.type==='DO'?'rgba(22,163,74,0.07)':'rgba(192,57,43,0.06)'};
+             border:1px solid ${s.type==='DO'?'rgba(22,163,74,0.2)':'rgba(192,57,43,0.18)'};
+             border-radius:10px;padding:14px">
+          <div style="font-family:'DM Mono',monospace;font-size:10px;margin-bottom:6px;
+               text-transform:uppercase;letter-spacing:0.1em;
+               color:${s.type==='DO'?'#4ade80':'#f87171'}">
+            ${s.type==='DO'?'✓':'⚠'} ${s.type}
+          </div>
+          <div style="font-size:13px;color:var(--cream-dim);line-height:1.6">${s.advice}</div>
+        </div>`).join('');
+
+      area.innerHTML = `
+        <div class="card mb-24">
+          <div class="flex items-center justify-between mb-16">
+            <div>
+              <div class="card-title">Overall Risk Assessment</div>
+              <div class="card-sub">Based on precedent and argument strength analysis</div>
+            </div>
+            <span class="risk-badge ${riskClass}">⚠ ${analysis.risk_level || 'MODERATE'} RISK</span>
+          </div>
+          <div class="stat-row" style="margin-bottom:0">
+            <div class="stat-chip">
+              <div class="stat-value" style="font-size:20px;color:#fbbf24">
+                ${(analysis.weaknesses||[]).length}
+              </div>
+              <div class="stat-label">Weaknesses Found</div>
+            </div>
+            <div class="stat-chip">
+              <div class="stat-value" style="font-size:20px;color:#f87171">
+                ${(analysis.weaknesses||[]).filter(w=>w.severity==='HIGH').length}
+              </div>
+              <div class="stat-label">High Risk Points</div>
+            </div>
+            <div class="stat-chip">
+              <div class="stat-value" style="font-size:20px;color:var(--gold-light)">
+                ${analysis.overall_confidence || 70}%
+              </div>
+              <div class="stat-label">Argument Confidence</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-title">Identified Weaknesses</div>
+            <div class="card-sub">Vulnerabilities opposing counsel will exploit</div>
+            ${weaknessesHtml || '<div class="text-muted text-sm">No weaknesses identified</div>'}
+          </div>
+          <div class="card">
+            <div class="card-title">Defense Counter-Arguments</div>
+            <div class="card-sub">Anticipated opposing counsel response</div>
+            <div class="debate-body">${counterHtml}</div>
+            <div class="divider"></div>
+            <div class="font-mono" style="font-size:10px;color:var(--gold);
+                 margin-bottom:10px;text-transform:uppercase;letter-spacing:0.1em">
+              Contrary Precedents
+            </div>
+            ${(data.contrary_precedents||[]).map(p=>`
+              <div class="precedent-item" style="padding:10px 0">
+                <div class="precedent-rank">→</div>
+                <div class="precedent-body">
+                  <div class="precedent-name" style="font-size:12.5px">${p.case_name}</div>
+                  <div class="precedent-snippet" style="font-size:11.5px">${p.snippet}</div>
+                </div>
+              </div>`).join('')}
+          </div>
+        </div>
+
+        <div class="card mt-24">
+          <div class="card-title">Strategy Recommendations</div>
+          <div class="card-sub">How to strengthen your argument against anticipated opposition</div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
+               gap:14px;margin-top:12px">
+            ${strategyHtml || '<div class="text-muted text-sm">No recommendations generated</div>'}
+          </div>
+        </div>`;
+
+    } catch (err) {
+      area.innerHTML = `
+        <div class="card" style="border-color:rgba(192,57,43,0.3)">
+          <div class="card-title" style="color:#f87171">❌ Error</div>
+          <div class="card-sub">${err.message}</div>
+          <div style="font-size:13px;color:var(--muted);margin-top:8px">
+            Make sure your backend is running: <code>python main.py</code>
+          </div>
+        </div>`;
+    } finally {
+      clearLoading(btn);
+    }
+  }
+
+</script>
+</body>
+</html>
