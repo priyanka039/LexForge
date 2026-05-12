@@ -169,3 +169,28 @@ def format_precedents(chunks: list) -> list:
             "binding":   "Binding" if court == 'Supreme Court of India' else "Persuasive"
         })
     return result
+
+
+def response_language_directive(lang: str | None) -> str:
+    """
+    Appended to model prompts. Values: auto | en | hi
+    - en: standard legal English for filings
+    - hi: Hindi (Devanagari) for client-facing explanations and simulations when chosen
+    - auto: match the user's primary language (English vs Hindi/Devanagari)
+    """
+    key = (lang or "auto").strip().lower()
+    if key == "hi":
+        return (
+            "\n\nOUTPUT LANGUAGE: Write the entire reply in Hindi (Devanagari script). "
+            "Keep conventional English legal labels where standard in India (e.g. Petitioner, Respondent, IRAC section names in English if clearer), "
+            "but all substantive analysis, arguments, and judicial observations must be clear Hindi."
+        )
+    if key == "en":
+        return (
+            "\n\nOUTPUT LANGUAGE: Write the entire reply in standard legal English suitable for written filings in Indian courts."
+        )
+    return (
+        "\n\nOUTPUT LANGUAGE: Detect the user's primary language from their instructions. "
+        "If they wrote mainly in Hindi (Devanagari) or asked for Hindi, respond fully in Hindi as above. "
+        "If mainly in English, respond in standard legal English. Avoid unnecessary mixing within the same sentence."
+    )

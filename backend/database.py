@@ -222,6 +222,22 @@ def delete_session(session_id: int) -> bool:
     return True
 
 
+def _normalize_api_timestamp(val: str | None) -> str | None:
+    """
+    SQLite DEFAULT datetime('now') is UTC in 'YYYY-MM-DD HH:MM:SS' form with no TZ.
+    Browsers wrongly interpret that as local time → wrong "time ago".
+    Normalize to ISO-8601 with Z so clients parse as UTC.
+    """
+    if not val or not isinstance(val, str):
+        return val
+    v = val.strip()
+    # Typical SQLite: "2026-05-05 14:30:00" (UTC)
+    if len(v) >= 19 and v[10:11] == " " and v[4] == "-" and v[7] == "-":
+        if "T" not in v[:19]:
+            return v[:19].replace(" ", "T") + "Z"
+    return v
+
+
 def _parse_session(row: dict) -> dict:
     """Parse JSON fields in a session row."""
     try:
@@ -232,4 +248,6 @@ def _parse_session(row: dict) -> dict:
         row['output_data'] = json.loads(row.get('output_data', '{}') or '{}')
     except Exception:
         row['output_data'] = {}
+    if row.get('created_at'):
+        row['created_at'] = _normalize_api_timestamp(row['created_at'])
     return row

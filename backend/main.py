@@ -1,32 +1,69 @@
 # ─────────────────────────────────────────────
-# main.py — LexForge API v3.0
+# main.py — LexForge API v3.1
 #
-# Routes:
-#   GET    /                          health check
-#   POST   /api/research              find precedents
-#   POST   /api/argument              build argument
-#   POST   /api/opposition            test weaknesses
-#   POST   /api/debate                simulate court
-#   POST   /api/corpus/upload         add to library
-#   GET    /api/corpus/list           list library
-#   DELETE /api/corpus/delete/{name}  remove from library
-#   POST   /api/export/report         download PDF
-#   GET    /api/cases                 list all matters
-#   POST   /api/cases                 new matter
-#   GET    /api/cases/{id}            get matter
-#   PUT    /api/cases/{id}            update matter
-#   DELETE /api/cases/{id}            delete matter
-#   GET    /api/cases/{id}/sessions   work in matter
-#   GET    /api/sessions              recent work
-#   GET    /api/sessions/{id}         get saved work
-#   PATCH  /api/sessions/{id}/notes   save notes
-#   PATCH  /api/sessions/{id}/case    move to matter
-#   DELETE /api/sessions/{id}         delete work
-#   POST   /api/search/live           Indian Kanoon search
+# IMPORTANT: Do NOT open index.html as a file.
+# Always run this server and open:
+#   http://localhost:8000/app
+#
+# Run: python main.py
 # ─────────────────────────────────────────────
 
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
+import os
+from pathlib import Path
+
+
+# ── tiny inline .env loader (no extra deps) ──
+# .env is authoritative: it always overrides whatever was in the shell
+# environment, otherwise stale values like `SARVAM_API_KEY=your_key_here`
+# left over from `.env.example` will silently win and break voice features.
+# Placeholder values are explicitly rejected.
+_PLACEHOLDER_VALUES = {"", "your_key_here", "your-key-here", "changeme", "placeholder"}
+
+
+def _load_env_file(path: Path) -> int:
+    """Returns the number of keys actually applied from this file."""
+    if not path.exists():
+        return 0
+    applied = 0
+    try:
+        for raw in path.read_text(encoding="utf-8-sig").splitlines():
+            line = raw.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, val = line.split("=", 1)
+            key, val = key.strip(), val.strip().strip('"').strip("'")
+            if not key or val.lower() in _PLACEHOLDER_VALUES:
+                continue
+            os.environ[key] = val
+            applied += 1
+    except Exception as e:
+        print(f"[env] failed to read {path}: {type(e).__name__}: {e}", flush=True)
+    return applied
+
+
+_PROJECT_ROOT = Path(__file__).parent.parent
+_loaded_any = False
+for _candidate in (_PROJECT_ROOT / ".env", Path(__file__).parent / ".env"):
+    n = _load_env_file(_candidate)
+    if n:
+        print(f"[env] loaded {n} key(s) from {_candidate}", flush=True)
+        _loaded_any = True
+    elif _candidate.exists():
+        print(f"[env] found {_candidate} but applied 0 keys (placeholders / empty)", flush=True)
+if not _loaded_any:
+    print(f"[env] no .env file found at {_PROJECT_ROOT / '.env'} or {Path(__file__).parent / '.env'}", flush=True)
+
+# Final guard: if SARVAM_API_KEY is still a placeholder (came from the OS
+# env), wipe it so the server logs a clear "key not set" instead of a
+# misleading 403.
+if os.environ.get("SARVAM_API_KEY", "").strip().lower() in _PLACEHOLDER_VALUES:
+    os.environ.pop("SARVAM_API_KEY", None)
+
+
+from fastapi                  import FastAPI
+from fastapi.middleware.cors  import CORSMiddleware
+from fastapi.staticfiles      import StaticFiles
+from fastapi.responses        import FileResponse
 import uvicorn
 
 from routes.research        import router as research_router
@@ -38,11 +75,12 @@ from routes.export          import router as export_router
 from routes.cases_router    import router as cases_router
 from routes.sessions_router import router as sessions_router
 from routes.search_web      import router as search_web_router
+from routes.voice           import router as voice_router
 
 from config   import collection, CHAT_MODEL, EMBED_MODEL
 from database import init_db
 
-app = FastAPI(title="LexForge", version="3.0")
+app = FastAPI(title="LexForge", version="3.1")
 
 app.add_middleware(
     CORSMiddleware,
@@ -61,13 +99,18 @@ app.include_router(export_router)
 app.include_router(cases_router)
 app.include_router(sessions_router)
 app.include_router(search_web_router)
+app.include_router(voice_router)
 
 
 @app.on_event("startup")
 def startup():
     """Initialise database tables on startup."""
     init_db()
-    print("LexForge database ready.")
+    print("\n" + "="*52)
+    print("  LexForge is running.")
+    print("  Open http://localhost:8000/app in your browser.")
+    print("  Do NOT open index.html as a file:// URL.")
+    print("="*52 + "\n")
 
 
 @app.get("/")
@@ -76,9 +119,31 @@ def health_check():
         "status":      "LexForge is running",
         "library_size": collection.count(),
         "model":        CHAT_MODEL,
-        "version":      "3.0"
+        "version":      "3.1"
     }
 
 
+# ── Serve the frontend from FastAPI ──────────
+# This is what fixes the "buttons don't work" issue.
+# When opened as file://, browsers block all fetch()
+# calls to localhost. Serving from the same origin fixes it.
+FRONTEND_DIR = Path(__file__).parent.parent / "frontend"
+
+if FRONTEND_DIR.exists():
+    @app.get("/app", response_class=FileResponse)
+    def serve_app():
+        return FileResponse(FRONTEND_DIR / "index.html")
+
+    @app.get("/landing", response_class=FileResponse)
+    def serve_landing():
+        return FileResponse(FRONTEND_DIR / "landing.html")
+
+    # Serve CSS, JS, images etc.
+    app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
+    print(f"Frontend served from: {FRONTEND_DIR}")
+else:
+    print(f"WARNING: Place index.html in a 'frontend/' folder next to 'backend/'")
+
+
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=False)
