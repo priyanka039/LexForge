@@ -5,8 +5,9 @@
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html{scroll-behavior:smooth}
 
-/* ── FONT IMPORTS ── */
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600;1,700&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=IBM+Plex+Mono:wght@300;400;500;600&display=swap');
+/* ── FONT STACK ──
+   Single Times New Roman stack reused for every variable so the entire
+   UI renders in Times New Roman without changing markup elsewhere. */
 
 /* ══════════════════════════════════════════════════
    THEME VARIABLES
@@ -36,11 +37,15 @@ html{scroll-behavior:smooth}
   --accent: #C9A84C;
   --topbar-bg: rgba(9,21,42,0.94);
 
-  /* ── Fonts ── */
-  --serif:  'Playfair Display', Georgia, 'Times New Roman', serif;
-  --body:   'Libre Baskerville', Georgia, serif;
-  --mono:   'IBM Plex Mono', monospace;
-  --legal:  'Times New Roman', Times, Georgia, serif;
+  /* ── Fonts ──
+     All variables point to the same Times New Roman stack on purpose
+     so the entire app renders in TNR while preserving variable usage
+     elsewhere in this stylesheet. */
+  --tnr:    'Times New Roman', Times, Georgia, serif;
+  --serif:  var(--tnr);
+  --body:   var(--tnr);
+  --mono:   var(--tnr);
+  --legal:  var(--tnr);
 
   /* ── Layout ── */
   --sb-w:   260px;
@@ -1188,3 +1193,47 @@ body.voice-mic-disabled .voice-mic{display:none !important}
   letter-spacing:.04em;line-height:1.6;
 }
 .arg-disclaimer strong{color:var(--gold);font-weight:700}
+
+/* ══════════════════════════════════════════════════
+   ITALICS DISABLED GLOBALLY
+   User preference: no italics anywhere in the UI.
+   `!important` ensures this also overrides inline
+   `style="font-style:italic"` that exists in many places.
+   ══════════════════════════════════════════════════ */
+*, *::before, *::after,
+i, em, cite, address, dfn, var {
+  font-style: normal !important;
+}
+
+/* ══════════════════════════════════════════════════
+   TIMES NEW ROMAN SIZE COMPENSATION
+   Times New Roman has a smaller x-height (~0.45) than
+   the previous Playfair Display / Libre Baskerville
+   stack (~0.52), so every text block looked ~12%
+   smaller after the font swap. `font-size-adjust`
+   lets the browser scale TNR up until its x-height
+   matches the target ratio, restoring the original
+   visual size with zero per-class edits.
+   Supported in modern Chrome / Edge / Firefox / Safari.
+   ══════════════════════════════════════════════════ */
+:root {
+  font-size-adjust: 0.52;
+}
+*, *::before, *::after {
+  font-size-adjust: inherit;
+}
+
+/* ══════════════════════════════════════════════════
+   INPUT-FIELD MIC ICONS HIDDEN (temporary)
+   Hides the "speak to fill" mic button on every text
+   input and textarea. The markup and voice.js wiring
+   are intentionally left intact so this can be undone
+   later by simply removing this rule.
+   Does NOT affect:
+     - `.voice-listen-btn` (Read aloud)
+     - `#voice-mic-global`  (settings-bar mic toggle)
+   ══════════════════════════════════════════════════ */
+.voice-mic.in-input,
+.voice-mic.in-textarea {
+  display: none !important;
+}

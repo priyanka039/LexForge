@@ -172,6 +172,68 @@
     });
   }
 
+  // ── Encode an AudioBuffer (mixed to mono) to a 16-bit PCM WAV Blob ───────
+  // Sarvam STT does not accept audio/webm or opus — only WAV / MP3 / AAC /
+  // PCM. Chrome's MediaRecorder cannot produce WAV directly, so we decode
+  // the captured webm/ogg blob and re-encode it as WAV here in the browser.
+  function audioBufferToWav(buffer) {
+    const numCh = 1;
+    const sr    = buffer.sampleRate;
+    const len   = buffer.length;
+
+    const mono = new Float32Array(len);
+    const channels = buffer.numberOfChannels || 1;
+    for (let ch = 0; ch < channels; ch++) {
+      const data = buffer.getChannelData(ch);
+      for (let i = 0; i < len; i++) mono[i] += data[i] / channels;
+    }
+
+    const dataLen = len * 2;
+    const bufOut  = new ArrayBuffer(44 + dataLen);
+    const view    = new DataView(bufOut);
+    let pos = 0;
+    const writeStr = (s) => { for (let i = 0; i < s.length; i++) view.setUint8(pos++, s.charCodeAt(i)); };
+    const writeU32 = (v) => { view.setUint32(pos, v, true); pos += 4; };
+    const writeU16 = (v) => { view.setUint16(pos, v, true); pos += 2; };
+
+    writeStr('RIFF');
+    writeU32(36 + dataLen);
+    writeStr('WAVE');
+    writeStr('fmt ');
+    writeU32(16);
+    writeU16(1);                    // PCM
+    writeU16(numCh);                // channels
+    writeU32(sr);                   // sample rate
+    writeU32(sr * numCh * 2);       // byte rate
+    writeU16(numCh * 2);            // block align
+    writeU16(16);                   // bits per sample
+    writeStr('data');
+    writeU32(dataLen);
+
+    for (let i = 0; i < len; i++) {
+      let s = Math.max(-1, Math.min(1, mono[i]));
+      s = s < 0 ? s * 0x8000 : s * 0x7FFF;
+      view.setInt16(pos, s, true); pos += 2;
+    }
+    return new Blob([bufOut], { type: 'audio/wav' });
+  }
+
+  async function blobToWav(blob) {
+    if (!blob || !blob.size) return null;
+    const ctx = ensureAudioCtx();
+    if (!ctx) return null;
+    let arr;
+    try { arr = await blob.arrayBuffer(); } catch (_) { return null; }
+    let decoded;
+    try {
+      decoded = await new Promise((res, rej) => {
+        try { ctx.decodeAudioData(arr.slice(0), res, rej); }
+        catch (e) { rej(e); }
+      });
+    } catch (_) { return null; }
+    try { return audioBufferToWav(decoded); } catch (_) { return null; }
+  }
+
   // ── Networking ────────────────────────────────────────────────────────────
   async function apiSpeak(text, role) {
     if (!text) return '';
@@ -183,7 +245,11 @@
       });
       if (!res.ok) return '';
       const data = await res.json();
-      return data && data.audio_b64 || '';
+      const b64 = (data && data.audio_b64) || '';
+      if (!b64 && data && data.ok === false && data.reason) {
+        console.warn('[LexForge voice] No audio from Sarvam:', data.reason, '(see server terminal /api/voice/health)');
+      }
+      return b64;
     } catch (_) { return ''; }
   }
 
@@ -246,7 +312,7 @@
     rec.addEventListener('stop', async () => {
       const chunks = State.recorderChunks.slice();
       const recorderType = rec.mimeType || 'audio/webm';
-      const blob = new Blob(chunks, { type: recorderType });
+      let blob = new Blob(chunks, { type: recorderType });
       try { State.recorderStream.getTracks().forEach(t => t.stop()); } catch (_) {}
       State.recorder = null;
       State.recorderBtn = null;
@@ -256,6 +322,14 @@
 
       if (!blob.size) return;
       btn.classList.add('loading');
+
+      // Sarvam STT only accepts wav/mp3/aac/pcm — Chrome's MediaRecorder gives
+      // us webm/opus by default. Transcode in the browser before uploading.
+      if (!/audio\/wave?$|audio\/wav/i.test(blob.type)) {
+        const wav = await blobToWav(blob);
+        if (wav) blob = wav;
+      }
+
       const transcript = await apiTranscribe(blob);
       btn.classList.remove('loading');
       if (!transcript) return;

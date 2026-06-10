@@ -4,9 +4,7 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>LexForge — Chambers</title>
-<link rel="preconnect" href="https://fonts.googleapis.com"/>
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600;1,700&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=IBM+Plex+Mono:wght@300;400;500;600&display=swap" rel="stylesheet"/>
-<!-- <link rel="stylesheet" href="styles.css"/> -->
+<!-- Fonts: the entire UI now renders in Times New Roman, so no web fonts are loaded. -->
 <link rel="stylesheet" href="/static/styles.css"/>
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
@@ -560,9 +558,10 @@
       <div style="font-size:26px;opacity:.4;margin-bottom:9px">&sect;</div>
       <div style="font-family:var(--body);font-size:15px;font-style:italic;color:var(--w60);margin-bottom:4px">Drag &amp; drop PDF judgments, or <span style="color:var(--gold);text-decoration:underline">browse</span></div>
       <div style="font-family:var(--mono);font-size:10px;color:var(--w20)">Supreme Court · High Court · Tribunal judgments in PDF</div>
-      <input type="file" id="pdf-input" accept=".pdf" multiple style="display:none" onchange="handleFileSelect(event)"/>
+      <input type="file" id="pdf-input" accept=".pdf,.PDF,application/pdf" multiple style="display:none" onchange="handleFileSelect(event)"/>
     </div>
-    <div id="upload-queue" style="max-height:180px;overflow-y:auto;margin-bottom:12px"></div>
+    <div id="upload-queue" style="max-height:180px;overflow-y:auto;margin-bottom:8px"></div>
+    <p style="font-family:var(--mono);font-size:9px;color:var(--w20);margin:0 0 10px;line-height:1.4">Pick one or more PDFs, then click <strong style="color:var(--gold-l)">Upload</strong> below. Open this app at <code style="color:var(--w40)">/app</code> (not by double-clicking the HTML file).</p>
     <div style="display:flex;gap:10px;justify-content:space-between;align-items:center">
       <button class="btn btn-ghost" style="font-size:10px" onclick="loadLibraryList()">View Library</button>
       <div style="display:flex;gap:9px">

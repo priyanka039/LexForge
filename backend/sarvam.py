@@ -24,7 +24,7 @@ import httpx
 SARVAM_BASE_URL    = "https://api.sarvam.ai"
 SARVAM_HEADER_NAME = "api-subscription-key"
 
-STT_MODEL          = "saarika:v2"
+STT_MODEL          = "saarika:v2.5"
 TRANSLATE_MODEL    = "mayura:v1"
 TTS_MODEL          = "bulbul:v3"
 TTS_TEXT_LIMIT     = 2400        # Sarvam bulbul:v3 caps at 2500 chars; leave buffer.

@@ -32,7 +32,18 @@ def _load_env_file(path: Path) -> int:
                 continue
             key, val = line.split("=", 1)
             key, val = key.strip(), val.strip().strip('"').strip("'")
-            if not key or val.lower() in _PLACEHOLDER_VALUES:
+            # Strip inline comments: KEY=value  # note
+            if "#" in val:
+                val = val.split("#", 1)[0].strip().strip('"').strip("'")
+            if not key:
+                continue
+            if val.lower() in _PLACEHOLDER_VALUES:
+                if key == "SARVAM_API_KEY":
+                    print(
+                        f"[env] {path.name}: SARVAM_API_KEY is still a placeholder "
+                        "(e.g. your_key_here) — save a real key from Sarvam and restart the server.",
+                        flush=True,
+                    )
                 continue
             os.environ[key] = val
             applied += 1

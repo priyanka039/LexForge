@@ -12,6 +12,16 @@ const SCREEN_TITLES = {
 // API base URL — always use same origin (works on localhost AND ngrok)
 const API = window.location.origin;
 
+/** FastAPI `{ detail: string | {msg}[] }` → user-visible string */
+function formatApiDetail(detail) {
+  if (detail == null) return '';
+  if (typeof detail === 'string') return detail;
+  if (Array.isArray(detail))
+    return detail.map(x => (x && typeof x === 'object' && x.msg) ? x.msg : String(x)).join('; ');
+  if (typeof detail === 'object' && detail.msg) return detail.msg;
+  try { return JSON.stringify(detail); } catch (_) { return String(detail); }
+}
+
 window._lastResearch   = null;
 window._lastIrac       = null;
 window._lastOpposition = null;
@@ -652,6 +662,11 @@ async function loadSessionView(sessionId) {
     } else if (session.session_type === 'opposition') {
       const an = output.analysis || {};
       const rc = {HIGH:'risk-HIGH',MODERATE:'risk-MODERATE',LOW:'risk-LOW'}[an.risk_level] || 'risk-MODERATE';
+      const contrary = output.contrary_precedents || [];
+      const benchQs  = an.bench_questions || [];
+      const priority = an.priority_actions || [];
+      const strategy = an.strategy_recommendations || [];
+      const benchName = output.judge_persona?.name || 'Simulated Bench';
       contentHtml = `
         <div class="card mb-24">
           <div class="flex items-center justify-between mb-16">
@@ -666,13 +681,43 @@ async function loadSessionView(sessionId) {
         <div class="grid-2">
           <div class="card">
             <div class="card-title">Weaknesses</div>
-            ${(an.weaknesses||[]).map(w=>`<div class="weakness"><div class="weakness-id" style="color:${w.severity==='HIGH'?'#f87171':'#fbbf24'}">${w.id}</div><div><div style="font-size:11px;font-family:var(--mono);color:${w.severity==='HIGH'?'#f87171':'#fbbf24'};margin-bottom:4px">${w.severity} RISK</div><div class="weakness-text">${w.description}</div></div></div>`).join('')}
+            ${(an.weaknesses||[]).map(w=>`<div class="weakness"><div class="weakness-id" style="color:${w.severity==='HIGH'?'#f87171':'#fbbf24'}">${w.id}</div><div><div style="font-size:11px;font-family:var(--mono);color:${w.severity==='HIGH'?'#f87171':'#fbbf24'};margin-bottom:4px">${w.severity} RISK</div><div class="weakness-text">${w.description}</div></div></div>`).join('') || '<div style="color:var(--w40);padding:8px 0;font-size:13px">No significant weaknesses found.</div>'}
           </div>
           <div class="card">
             <div class="card-title">Counter-Arguments</div>
-            <div class="debate-body">${(an.counter_arguments||[]).map(c=>`<div class="debate-point">${c.point}${(c.source||c.authority)?`<span class="citation-tag">${c.source||c.authority}</span>`:''}</div>`).join('')}</div>
+            <div class="debate-body">${(an.counter_arguments||[]).map(c=>`<div class="debate-point">${c.point}${(c.source||c.authority)?`<span class="citation-tag">${c.source||c.authority}</span>`:''}</div>`).join('') || '<div style="color:var(--w40);padding:8px 0;font-size:13px">No counter-arguments captured.</div>'}</div>
+            ${contrary.length ? `<div class="divider"></div>
+              <div style="font-family:var(--mono);font-size:10px;color:var(--gold);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.1em">Cases That May Be Used Against You</div>
+              ${contrary.map(p => `<div class="prec-item"><div class="prec-rank">→</div><div class="prec-body"><div class="prec-name">${escapeHtml(p.case_name || '')}</div><div class="prec-meta">${[p.court, p.year].filter(x => x && x !== 'Unknown').join(' · ')}</div><div class="prec-snip">${escapeHtml(p.snippet || '')}</div>${p.url ? `<a href="${p.url}" target="_blank" rel="noopener" style="font-size:10px;color:var(--gold)">View on Indian Kanoon →</a>` : ''}</div></div>`).join('')}` : ''}
           </div>
-        </div>`;
+        </div>
+        ${benchQs.length ? `
+          <div class="card mt-24" style="border-color:rgba(200,165,90,0.2)">
+            <div style="font-family:var(--mono);font-size:10px;color:var(--gold);letter-spacing:0.14em;text-transform:uppercase;margin-bottom:4px">Bench Anticipation · ${escapeHtml(benchName)}</div>
+            <div class="card-title">Questions the Bench Will Put to You</div>
+            <div style="margin-top:14px;display:flex;flex-direction:column;gap:10px">
+              ${benchQs.map((q, qi) => `
+                <div style="background:var(--void);border:1px solid rgba(239,68,68,0.18);border-radius:9px;padding:14px 16px">
+                  <div style="display:flex;gap:10px;align-items:flex-start">
+                    <div style="font-family:var(--mono);font-size:10px;color:var(--gold);flex-shrink:0;margin-top:3px">Q${qi+1}</div>
+                    <div>
+                      <div style="font-family:var(--legal);font-size:16px;font-style:italic;color:var(--cream);line-height:1.55;margin-bottom:6px">"${escapeHtml(q.question || '')}"</div>
+                      <div style="font-size:12.5px;color:var(--w40)">${escapeHtml(q.implication || '')}</div>
+                    </div>
+                  </div>
+                </div>`).join('')}
+            </div>
+          </div>` : ''}
+        ${(priority.length || strategy.length) ? `
+          <div class="card mt-24">
+            <div class="card-label" style="margin-bottom:5px">Before the Next Date</div>
+            <div class="card-title">Priority Actions</div>
+            <ol style="margin-top:14px;padding-left:22px;display:flex;flex-direction:column;gap:12px">
+              ${priority.length
+                ? priority.map(a => `<li style="font-family:var(--legal);font-size:12pt;line-height:1.8;color:var(--w60)">${escapeHtml(a)}</li>`).join('')
+                : strategy.map(s => `<li style="font-family:var(--legal);font-size:12pt;line-height:1.8;color:var(--w60)"><strong style="font-style:normal;color:${s.type==='DO'?'#6abf6a':'#e08070'}">${s.type==='DO'?'Do:':'Avoid:'}</strong> ${escapeHtml(s.advice || '')}</li>`).join('')}
+            </ol>
+          </div>` : ''}`;
 
     } else if (session.session_type === 'debate') {
       const sm = output.summary || {};
@@ -799,22 +844,42 @@ async function deleteSession(sessionId, btn) {
 // ── UPLOAD LIBRARY ────────────────────────────────────────────────────────────
 let _filesToUpload = [];
 
+function isPdfFilename(name) {
+  return typeof name === 'string' && /\.pdf$/i.test(name.trim());
+}
+
 function handleDrop(e) {
   e.preventDefault();
-  const files = Array.from(e.dataTransfer.files).filter(f => f.name.endsWith('.pdf'));
-  addToUploadQueue(files);
+  const dz = e.currentTarget;
+  if (dz && dz.style) {
+    dz.style.borderColor = '';
+    dz.style.background = 'var(--gold-f)';
+  }
+  const incoming = Array.from(e.dataTransfer?.files || []);
+  const pdfList    = incoming.filter(f => isPdfFilename(f.name));
+  if (!pdfList.length && incoming.length)
+    showNotif('Wrong file type', 'Only PDF files can be indexed (.pdf or .PDF).', '⚠');
+  addToUploadQueue(pdfList);
 }
+
 function handleFileSelect(e) {
-  addToUploadQueue(Array.from(e.target.files).filter(f => f.name.endsWith('.pdf')));
+  const incoming = Array.from(e.target.files || []);
+  const pdfList  = incoming.filter(f => isPdfFilename(f.name));
+  if (!pdfList.length && incoming.length)
+    showNotif('Wrong file type', 'Only PDF files can be indexed (.pdf or .PDF).', '⚠');
+  addToUploadQueue(pdfList);
   e.target.value = '';
 }
+
 function addToUploadQueue(files) {
   files.forEach(f => { if (!_filesToUpload.find(x => x.name === f.name)) _filesToUpload.push(f); });
   renderUploadQueue();
 }
+
 function renderUploadQueue() {
   const q   = document.getElementById('upload-queue');
   const btn = document.getElementById('upload-btn');
+  if (!q || !btn) return;
   if (!_filesToUpload.length) { q.innerHTML=''; btn.style.display='none'; return; }
   btn.style.display = 'inline-flex';
   btn.textContent   = `Upload ${_filesToUpload.length} File${_filesToUpload.length > 1 ? 's' : ''}`;
@@ -830,30 +895,123 @@ function renderUploadQueue() {
 
 async function uploadFiles() {
   const btn = document.getElementById('upload-btn');
-  btn.disabled=true; btn.textContent='Uploading...';
+  try {
+    if (!btn) {
+      console.error('LexForge upload: upload-btn missing');
+      showNotif('Upload unavailable', 'Page did not finish loading — refresh and try again.', '⚠');
+      return;
+    }
+
+    const snapshot = _filesToUpload.slice();
+    if (!snapshot.length) {
+      showNotif('No judgment file queued', 'Use Browse or drag-and-drop first. On Windows the extension can be .pdf or .PDF.', '⚠');
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Uploading...';
   let ok = 0;
-  for (let i=0; i < _filesToUpload.length; i++) {
-    const f  = _filesToUpload[i];
+  const failed = [];
+  /** Parallel to `failed`: full error string for tooltip + notification */
+  const failedMsgs = [];
+
+  for (let i = 0; i < snapshot.length; i++) {
+    const f = snapshot[i];
     const se = document.getElementById(`upstat-${i}`);
     const ie = document.getElementById(`upitem-${i}`);
-    if (se) { se.textContent='Uploading...'; se.style.color='#7eaaee'; }
-    const fd = new FormData(); fd.append('file', f);
+    if (se) { se.textContent = 'Uploading...'; se.style.color = '#7eaaee'; }
+    const fd = new FormData();
+    fd.append('file', f, f.name);
     try {
-      const data = await (await fetch(`${API}/api/corpus/upload`,{method:'POST',body:fd})).json();
+      const res = await fetch(`${API}/api/corpus/upload`, { method: 'POST', body: fd });
+      let data = null;
+      try {
+        data = await res.json();
+      } catch (_) {
+        failed.push(f);
+        failedMsgs.push(`HTTP ${res.status} - response was not JSON`);
+        if (se) {
+          se.textContent = `HTTP ${res.status}`;
+          se.style.color = '#f87171';
+          se.title = failedMsgs[failedMsgs.length - 1];
+        }
+        continue;
+      }
+      if (!res.ok) {
+        const msg = formatApiDetail(data.detail) || `HTTP ${res.status}`;
+        failed.push(f);
+        failedMsgs.push(msg);
+        const short = msg.length > 90 ? `${msg.slice(0, 87)}…` : msg;
+        if (se) {
+          se.textContent = short;
+          se.style.color = '#f87171';
+          se.title = msg;
+        }
+        continue;
+      }
       if (data.status === 'success') {
-        if (se) { se.textContent=`✓ ${data.chunk_count} sections`; se.style.color='#4ade80'; }
-        if (ie) ie.style.borderColor='rgba(22,163,74,0.3)';
+        if (se) { se.textContent = `✓ ${data.chunk_count} sections`; se.style.color = '#4ade80'; se.title = ''; }
+        if (ie) ie.style.borderColor = 'rgba(22,163,74,0.3)';
         const sc = document.getElementById('stat-corpus');
         if (sc) sc.textContent = data.corpus_size;
         ok++;
       } else if (data.status === 'already_exists') {
-        if (se) { se.textContent='Already in library'; se.style.color='#fbbf24'; }
-      } else { throw new Error(data.detail || 'Failed'); }
-    } catch(e) { if (se) { se.textContent='Failed'; se.style.color='#f87171'; } }
+        if (se) { se.textContent = 'Already in library'; se.style.color = '#fbbf24'; se.title = data.message || ''; }
+      } else {
+        failed.push(f);
+        const msg = formatApiDetail(data.detail) || 'Unexpected response';
+        failedMsgs.push(msg);
+        if (se) {
+          se.textContent = msg.length > 90 ? `${msg.slice(0, 87)}…` : msg;
+          se.style.color = '#f87171';
+          se.title = msg;
+        }
+      }
+    } catch (e) {
+      failed.push(f);
+      const msg = e.message || 'Network error: is LexForge running at the URL you opened (/app, not file://)?';
+      failedMsgs.push(msg);
+      if (se) {
+        const short = msg.length > 90 ? `${msg.slice(0, 87)}…` : msg;
+        se.textContent = short;
+        se.style.color = '#f87171';
+        se.title = msg;
+      }
+    }
   }
-  btn.disabled=false; btn.textContent = ok > 0 ? `✓ ${ok} Added` : 'Retry';
-  _filesToUpload = [];
-  if (ok > 0) showNotif('Authorities Added', `${ok} judgment${ok > 1 ? 's' : ''} indexed.`);
+
+  _filesToUpload = failed;
+  renderUploadQueue();
+  failedMsgs.forEach((msg, idx) => {
+    const se = document.getElementById(`upstat-${idx}`);
+    if (!se || !msg) return;
+    const short = msg.length > 90 ? `${msg.slice(0, 87)}…` : msg;
+    se.textContent = short;
+    se.style.color = '#f87171';
+    se.title = msg;
+  });
+
+  btn.disabled = false;
+  if (failed.length)
+    btn.textContent = ok > 0 ? `✓ ${ok} added · fix ${failed.length}` : 'Retry';
+  else if (ok > 0)
+    btn.textContent = `✓ ${ok} added`;
+  else
+    btn.textContent = 'Upload';
+
+  if (failed.length === snapshot.length && snapshot.length && ok === 0)
+    showNotif('Upload blocked', failedMsgs[0] || 'Check backend terminal for errors.', '⚠');
+  else if (ok > 0)
+    showNotif('Authorities added', `${ok} judgment${ok > 1 ? 's' : ''} indexed.`);
+  } catch (err) {
+    console.error(err);
+    const msg = err?.message || String(err);
+    showNotif('Upload failed', msg, '⚠');
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Retry';
+    }
+  }
 }
 
 async function loadLibraryList() {

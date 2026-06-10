@@ -4,7 +4,7 @@
 #
 # Flow:
 #   User uploads PDF from browser →
-#   FastAPI receives the file →
+#   FastAPI receives the file → save copy under data/raw_pdfs →
 #   Extract text → chunk it →
 #   Embed each chunk with nomic-embed-text →
 #   Store in ChromaDB → return summary
@@ -22,11 +22,32 @@ import fitz                     # pymupdf — reads PDFs
 import ollama
 
 from fastapi    import APIRouter, HTTPException, UploadFile, File
-from config     import collection, EMBED_MODEL
+from config     import collection, EMBED_MODEL, RAW_PDFS_FOLDER
 from llama_index.core             import Document
 from llama_index.core.node_parser import SentenceSplitter
 
 router = APIRouter()
+
+
+def _library_pdf_path(filename: str) -> str:
+    """Absolute path for a PDF under raw_pdfs; filename must be basename only."""
+    safe = os.path.basename(filename)
+    if not safe.lower().endswith(".pdf"):
+        safe = f"{safe}.pdf"
+    return os.path.join(RAW_PDFS_FOLDER, safe)
+
+
+def _sliding_window_chunks(text: str, window: int = 2000, overlap: int = 200) -> list:
+    """Last-resort splitting when section/sentence parsers yield nothing."""
+    text = text.strip()
+    out, step = [], max(1, window - overlap)
+    i = 0
+    while i < len(text):
+        piece = text[i : i + window].strip()
+        if piece:
+            out.append({"text": piece, "section": "GENERAL"})
+        i += step
+    return out
 
 
 # ═════════════════════════════════════════════
@@ -59,8 +80,8 @@ def detect_metadata(text: str, filename: str) -> dict:
     """Auto-detect court, year, and case name from text."""
     sample = text[:2500]
 
-    # Year
-    years = re.findall(r'\b(19[5-9]\d|20[0-2]\d)\b', sample)
+    # Year (2000–2099 plus 1950–1999)
+    years = re.findall(r'\b(19[5-9]\d|20\d{2})\b', sample)
     year  = years[0] if years else "Unknown"
 
     # Court
@@ -77,6 +98,8 @@ def detect_metadata(text: str, filename: str) -> dict:
         (r'High Court of Gujarat|Gujarat High Court',        'Gujarat High Court'),
         (r'High Court of Jharkhand|Jharkhand High Court',    'Jharkhand High Court'),
         (r'High Court of Punjab|Punjab.*High Court',         'Punjab & Haryana High Court'),
+        (r'High Court of Himachal|Himachal Pradesh High Court|HP High Court',
+                                                              'HP High Court'),
         (r'National Company Law Appellate|NCLAT',            'NCLAT'),
         (r'National Company Law Tribunal|NCLT',              'NCLT'),
         (r'National Consumer|NCDRC',                         'NCDRC'),
@@ -136,6 +159,17 @@ def chunk_legal_text(text: str, case_file: str) -> list:
             for node in sub_nodes:
                 all_chunks.append({"text": node.text, "section": heading})
 
+    stripped = text.strip()
+    if not all_chunks and len(stripped) >= 80:
+        sub_doc   = Document(text=stripped)
+        splitter  = SentenceSplitter(chunk_size=512, chunk_overlap=72)
+        sub_nodes = splitter.get_nodes_from_documents([sub_doc])
+        for node in sub_nodes:
+            nt = (node.text or "").strip()
+            if len(nt) >= 50:
+                all_chunks.append({"text": nt, "section": "GENERAL"})
+    if not all_chunks and len(stripped) >= 50:
+        all_chunks = _sliding_window_chunks(stripped)
     return all_chunks
 
 
@@ -148,7 +182,16 @@ def store_chunks(chunks: list, meta: dict) -> int:
 
     for i, chunk in enumerate(chunks):
         chunk_id  = f"{meta['case_file']}_chunk_{i}"
-        embedding = ollama.embeddings(model=EMBED_MODEL, prompt=chunk['text'])['embedding']
+        try:
+            embedding = ollama.embeddings(model=EMBED_MODEL, prompt=chunk['text'])['embedding']
+        except Exception as e:
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    f"Embedding service failed — start Ollama and ensure model "
+                    f"'{EMBED_MODEL}' is available (`ollama pull {EMBED_MODEL}`). Error: {e}"
+                ),
+            ) from e
         metadata  = {
             **meta,
             "section":     chunk['section'],
@@ -180,31 +223,45 @@ async def upload_corpus(file: UploadFile = File(...)):
 
     Steps:
     1. Validate file is a PDF
-    2. Check if already indexed (prevent duplicates)
-    3. Extract text with PyMuPDF
-    4. Auto-detect court, year, case name
-    5. Chunk the text (section-aware)
-    6. Embed each chunk with nomic-embed-text
-    7. Store everything in ChromaDB
-    8. Return summary
+    2. Check if already indexed (prevent duplicates); rewrite raw file if missing on disk
+    3. Save a copy under data/raw_pdfs
+    4. Extract text with PyMuPDF
+    5. Auto-detect court, year, case name
+    6. Chunk the text (section-aware)
+    7. Embed each chunk with nomic-embed-text
+    8. Store everything in ChromaDB (or remove the saved PDF if indexing fails)
     """
     # Validate file type
-    if not file.filename.endswith('.pdf'):
+    if not file.filename or not file.filename.lower().endswith('.pdf'):
         raise HTTPException(
             status_code=400,
             detail="Only PDF files are supported. Please upload a .pdf file."
         )
 
-    filename  = file.filename
+    filename  = os.path.basename(file.filename)
     case_file = os.path.splitext(filename)[0]
+    pdf_path  = _library_pdf_path(filename)
 
-    # Check for duplicate
+    # Read file bytes (needed for disk + processing)
+    pdf_bytes = await file.read()
+
+    if len(pdf_bytes) < 64 or not pdf_bytes.startswith(b"%PDF"):
+        raise HTTPException(
+            status_code=400,
+            detail="File is missing a PDF header (%PDF) or is too small to be valid."
+        )
+
+    # Check for duplicate in Chroma — keep raw_pdfs in sync (restore file if missing)
     try:
         existing = collection.get(
             where={"case_file": case_file},
             include=["metadatas"]
         )
         if existing and existing.get('ids') and len(existing['ids']) > 0:
+            os.makedirs(RAW_PDFS_FOLDER, exist_ok=True)
+            if not os.path.isfile(pdf_path):
+                with open(pdf_path, "wb") as out:
+                    out.write(pdf_bytes)
             return {
                 "status":      "already_exists",
                 "message":     f"'{filename}' is already in your corpus.",
@@ -215,23 +272,27 @@ async def upload_corpus(file: UploadFile = File(...)):
     except Exception:
         pass   # collection.get with where-filter may fail on empty DB
 
-    # Read file bytes
-    pdf_bytes = await file.read()
-
-    if len(pdf_bytes) < 1000:
+    os.makedirs(RAW_PDFS_FOLDER, exist_ok=True)
+    try:
+        with open(pdf_path, "wb") as out:
+            out.write(pdf_bytes)
+    except OSError as e:
         raise HTTPException(
-            status_code=400,
-            detail="File appears to be empty or corrupted."
+            status_code=500,
+            detail=f"Could not save PDF to library: {e}"
         )
 
     try:
         # Extract text
         text = extract_text(pdf_bytes)
 
-        if len(text) < 200:
+        if len(text) < 100:
             raise HTTPException(
                 status_code=422,
-                detail="Could not extract readable text from this PDF. It may be scanned/image-based."
+                detail=(
+                    "Too little selectable text was extracted. This PDF may be image-only "
+                    "(scan) or copy-protected: use OCR or another version."
+                )
             )
 
         # Detect metadata
@@ -260,8 +321,18 @@ async def upload_corpus(file: UploadFile = File(...)):
         }
 
     except HTTPException:
+        if os.path.isfile(pdf_path):
+            try:
+                os.unlink(pdf_path)
+            except OSError:
+                pass
         raise
     except Exception as e:
+        if os.path.isfile(pdf_path):
+            try:
+                os.unlink(pdf_path)
+            except OSError:
+                pass
         raise HTTPException(
             status_code=500,
             detail=f"Failed to process PDF: {str(e)}"
@@ -314,28 +385,45 @@ def list_corpus():
 @router.delete("/api/corpus/delete/{case_file}")
 def delete_case(case_file: str):
     """
-    Removes all chunks for a given case from ChromaDB.
+    Removes all chunks for a given case from ChromaDB and deletes the PDF from raw_pdfs.
     """
     try:
+        safe_stem = os.path.basename(case_file)
+        pdf_path  = os.path.join(RAW_PDFS_FOLDER, f"{safe_stem}.pdf")
+
         # Find all chunk IDs for this case
         results = collection.get(
-            where={"case_file": case_file},
+            where={"case_file": safe_stem},
             include=["metadatas"]
         )
         ids_to_delete = results.get('ids', [])
 
-        if not ids_to_delete:
+        # Allow removing the file from disk when present even if vectors were cleared manually
+        if not ids_to_delete and not os.path.isfile(pdf_path):
             raise HTTPException(
                 status_code=404,
-                detail=f"Case '{case_file}' not found in corpus."
+                detail=f"Case '{safe_stem}' not found in corpus."
             )
 
-        collection.delete(ids=ids_to_delete)
+        if ids_to_delete:
+            collection.delete(ids=ids_to_delete)
+
+        file_removed = False
+        if os.path.isfile(pdf_path):
+            try:
+                os.unlink(pdf_path)
+                file_removed = True
+            except OSError as e:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Removed from index but could not delete PDF file: {e}"
+                )
 
         return {
             "status":         "deleted",
-            "case_file":      case_file,
+            "case_file":      safe_stem,
             "chunks_removed": len(ids_to_delete),
+            "file_removed":   file_removed,
             "corpus_size":    collection.count()
         }
 
