@@ -127,31 +127,33 @@ def _ik_html(query, max_results):
             return []
         soup = BeautifulSoup(r.text, "html.parser")
         out  = []
-        for div in soup.find_all("div", class_="result")[:max_results]:
-            a = (
-                div.find("a", class_="result_title")
-                or div.find("a", href=re.compile(r'^/doc/'))
-            )
-            if not a:
+        for item in soup.find_all(class_="result")[:max_results]:
+            title_a = (
+                item.find("h4", class_="result_title")
+                and item.find("h4", class_="result_title").find("a")
+            ) or item.find("a", class_="result_title") or item.find("a", href=re.compile(r'^/doc/'))
+            if not title_a:
                 continue
-            title = a.get_text(strip=True)
-            href  = a.get("href", "")
-            link  = (IK_BASE + href) if href.startswith("/") else href
+            title = title_a.get_text(" ", strip=True)
+            doc_a = item.find("a", href=re.compile(r"^/doc/\d+/?$"))
+            href  = (doc_a or title_a).get("href", "")
+            m     = re.search(r"/doc(?:fragment)?/(\d+)", href)
+            tid   = m.group(1) if m else ""
+            link  = f"{IK_BASE}/doc/{tid}/" if tid else (
+                (IK_BASE + href) if href.startswith("/") else href
+            )
             if not link.startswith("http"):
                 continue
-            snip_t  = div.find("p") or div.find("div", class_="snippet")
+            snip_t  = item.find("div", class_="headline") or item.find("p") or item.find("div", class_="snippet")
             snippet = re.sub(
                 r"\[[\w\s,\.]+\]", "",
-                snip_t.get_text(strip=True)[:320] if snip_t else ""
+                snip_t.get_text(" ", strip=True)[:320] if snip_t else ""
             )
-            meta_t = (
-                div.find("div", class_="docsource_main")
-                or div.find("div", class_="docsource")
-            )
+            meta_t = item.find("span", class_="docsource") or item.find("div", class_="docsource")
             court = _classify_court(
                 (meta_t.get_text(" ", strip=True) if meta_t else "") or title
             )
-            year = _year((meta_t.get_text() if meta_t else "") + " " + title)
+            year = _year(title + " " + snippet)
             out.append({
                 "title":   title,
                 "court":   court,
@@ -161,6 +163,7 @@ def _ik_html(query, max_results):
                 "citation": "",
                 "source":  "Indian Kanoon",
                 "binding": "Binding" if court == "Supreme Court of India" else "Persuasive",
+                "doc_id":  tid,
             })
         return out
     except Exception:
@@ -373,43 +376,73 @@ def _constitution_lookup(query):
 
 
 # ─── Main Public Function ─────────────────────
-def fetch_legal_sources(query: str, max_results: int = 6) -> list:
+def fetch_legal_sources(
+    query: str,
+    max_results: int = 6,
+    *,
+    include_constitution: bool = False,
+    judgments_only: bool = True,
+) -> list:
     """
-    FIX: Each individual scraper already returns [] on failure.
-    This wrapper adds an outer try/except so even an unexpected
-    error in the orchestration logic cannot propagate to the caller.
+    Multi-source live legal search with relevance ranking.
+
+    By default returns JUDGMENTS only — constitutional snippets and bare-act
+    material are excluded unless the query is explicitly constitutional
+    (include_constitution=True or query mentions Article X).
     """
     try:
+        from legal_fetch import (
+            is_constitutional_query,
+            rank_results,
+            search_judgments,
+        )
+
         seen, all_r = set(), []
 
-        # Always check constitutional provisions first (no network)
-        for r in _constitution_lookup(query):
-            k = r["title"][:40].lower()
+        # Constitutional lookup ONLY when the query is actually about
+        # fundamental rights / articles — never for case-name searches.
+        if include_constitution or is_constitutional_query(query):
+            for r in _constitution_lookup(query):
+                k = r["title"][:40].lower()
+                if k not in seen:
+                    seen.add(k)
+                    all_r.append(r)
+
+        # Primary: ranked Indian Kanoon judgment search.
+        for r in search_judgments(query, max_results=max_results * 2):
+            k = r["title"][:50].lower()
             if k not in seen:
                 seen.add(k)
                 all_r.append(r)
 
-        sources = [_ik_api, _ik_html, _sci_portal, _ecourts_portal, _ddg]
-        for fn in sources:
-            if len(all_r) >= max_results:
-                break
-            try:
-                for r in fn(query, max_results):
-                    k = r["title"][:40].lower()
-                    if k not in seen and r["title"]:
-                        seen.add(k)
-                        all_r.append(r)
-                        if len(all_r) >= max_results:
-                            break
-            except Exception:
-                pass   # this source failed; try next one
-            time.sleep(0.2)
+        # Supplement with other portals if we still need more.
+        if len(all_r) < max_results:
+            sources = [_ik_api, _ik_html, _sci_portal, _ecourts_portal, _ddg]
+            for fn in sources:
+                if len(all_r) >= max_results:
+                    break
+                try:
+                    for r in fn(query, max_results):
+                        if judgments_only:
+                            title_src = (r.get("title", "") + " " + r.get("source", "")).lower()
+                            if any(x in title_src for x in (
+                                "constitution of india", "bare act", "legislative.gov",
+                            )):
+                                continue
+                        k = r["title"][:50].lower()
+                        if k not in seen and r.get("title"):
+                            seen.add(k)
+                            all_r.append(r)
+                            if len(all_r) >= max_results * 2:
+                                break
+                except Exception:
+                    pass
+                time.sleep(0.2)
 
-        return all_r[:max_results]
+        ranked = rank_results(query, all_r)
+        return ranked[:max_results]
 
     except Exception:
-        # FIX: top-level safety net — live search failure must NEVER crash
-        # the argument/debate/opposition routes that call this function.
         return []
 
 

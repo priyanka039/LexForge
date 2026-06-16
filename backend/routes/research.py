@@ -2,7 +2,11 @@
 from fastapi  import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing   import Optional
-from utils    import search_chromadb, call_qwen, build_context, format_precedents, response_language_directive
+from utils    import (
+    search_chromadb, call_qwen, build_context, format_precedents,
+    response_language_directive, verify_citations, corpus_is_empty,
+)
+from legal_fetch import extract_case_names
 from database import save_session
 from routes.search_web import fetch_legal_sources
 
@@ -20,8 +24,16 @@ class ResearchRequest(BaseModel):
 @router.post("/api/research")
 def research(request: ResearchRequest):
     try:
-        # 1. Local library search
-        chunks = search_chromadb(request.query, request.top_k)
+        # 1. Local library search — case law and statute provisions are
+        #    retrieved SEPARATELY so a large bare act (e.g. the Constitution)
+        #    can inform context without crowding the precedent list.
+        case_chunks    = search_chromadb(
+            request.query, request.top_k, exclude_doc_types=["statute"]
+        )
+        statute_chunks = search_chromadb(
+            request.query, 2, doc_types=["statute"], min_score=0.40
+        )
+        chunks = case_chunks + statute_chunks
 
         # 2. Live multi-source search
         live_results = []
@@ -75,7 +87,7 @@ CASE EXCERPTS AND SOURCES:
 
 RESEARCH MEMORANDUM:{response_language_directive(request.response_language)}"""
 
-        answer = call_qwen(prompt, max_tokens=1000)
+        answer = call_qwen(prompt, max_tokens=1600)
 
         # 5. Citation quality check
         source_count = answer.count('[SOURCE') + answer.count('[LIVE SOURCE')
@@ -89,11 +101,30 @@ RESEARCH MEMORANDUM:{response_language_directive(request.response_language)}"""
                 "Verify all propositions on SCC Online, Manupatra, or Indian Kanoon independently."
             )
 
+        # 7. Citation provenance — flag every case the model named that is
+        #    NOT backed by a retrieved source, so the lawyer knows what to verify.
+        provenance = verify_citations(answer, grounded_chunks=case_chunks)
+        unverified = [c["citation"] for c in provenance if not c["verified"]]
+        if unverified and not disclaimer:
+            disclaimer = (
+                "Some cited authorities were not found in your uploaded corpus and may be "
+                "from model memory — verify them on SCC Online / Manupatra / Indian Kanoon "
+                "before relying on them."
+            )
+
+        empty = corpus_is_empty()
+        suggested = extract_case_names(request.query) if empty else []
+
         output = {
             "query":         request.query,
             "answer":        answer,
-            "precedents":    format_precedents(chunks),
+            "precedents":    format_precedents(case_chunks),
+            "provisions":    format_precedents(statute_chunks),
             "live_results":  live_results,
+            "citation_provenance": provenance,
+            "unverified_citations": unverified,
+            "corpus_empty":  empty,
+            "fetch_suggestion": suggested[0] if suggested else (request.query[:80] if empty else None),
             "total_sources": len(chunks) + len(live_results),
             "disclaimer":    disclaimer,
         }

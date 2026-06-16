@@ -6,7 +6,10 @@ from fastapi.responses  import StreamingResponse
 from pydantic           import BaseModel
 from typing             import Optional, Iterator
 
-from utils    import search_chromadb, call_qwen, build_context, parse_json_robust, format_precedents, response_language_directive
+from utils    import (
+    search_chromadb, call_qwen, build_context, parse_json_robust,
+    format_precedents, response_language_directive, verify_citations,
+)
 from database import save_session
 from routes.search_web import fetch_legal_sources
 
@@ -23,63 +26,52 @@ class ArgumentRequest(BaseModel):
     response_language:  str           = "auto"  # auto | en | hi
 
 
-@router.post("/api/argument")
-def build_argument(request: ArgumentRequest):
-    try:
-        # Step 1: Issue identification
-        issue_prompt = f"""You are a senior Indian advocate reviewing instructions from a client.
+# Indian litigation is frequently won on a procedural or special-statute
+# ground, not the substantive merits. Force the model to hunt for these first
+# rather than producing generic submissions.
+_PROCEDURAL_DIRECTIVE = (
+    "Before substantive merits, actively check for a winning PROCEDURAL, "
+    "JURISDICTIONAL, or SPECIAL-STATUTE ground and lead with it if it exists: "
+    "e.g. Prevention of Corruption Act S.5A/S.19 sanction & designated-officer "
+    "requirements; NDPS Act S.50 search procedure; POCSO mandatory procedure; "
+    "Cr.P.C. S.197/S.482 and limitation; CPC Order VII Rule 11 and res judicata; "
+    "writ maintainability and alternative-remedy bars. If such a ground exists, "
+    "it MUST appear as the first issue/submission."
+)
+
+
+def _issue_prompt(request: "ArgumentRequest") -> str:
+    return f"""You are a senior Indian advocate reviewing instructions from a client.
 Identify the distinct legal issues in these facts. There are usually 2 to 4 issues.
 List each one separately. Be precise — this is a professional legal analysis.
+
+{_PROCEDURAL_DIRECTIVE}
 
 Facts: {request.facts}
 Court: {request.jurisdiction}
 Area of Law: {request.area_of_law}
 {f"Additional context: {request.extra_context}" if request.extra_context else ""}
 
+Order issues by winning strength — strongest procedural/technical ground FIRST.
 Return ONLY valid JSON, no explanation:
 {{
   "issues": [
-    {{"issue": "precise legal question", "area_of_law": "specific area", "priority": "high/medium/low"}},
-    {{"issue": "precise legal question", "area_of_law": "specific area", "priority": "high/medium/low"}}
+    {{"issue": "precise legal question", "area_of_law": "specific area", "priority": "high/medium/low", "ground_type": "procedural/jurisdictional/substantive"}}
   ]
 }}{response_language_directive(request.response_language)}"""
 
-        issues_data = parse_json_robust(call_qwen(issue_prompt, max_tokens=500))
-        issues      = issues_data.get("issues", [])
 
-        if not issues:
-            raise ValueError("Could not identify legal issues. Please provide more detailed facts.")
-
-        # Step 2: IRAC for each issue with live sources
-        irac_results   = []
-        all_precedents = []
-
-        for idx, issue in enumerate(issues):
-            search_q = f"{issue['issue']} {issue.get('area_of_law','')} {request.jurisdiction}"
-
-            # Local library
-            chunks  = search_chromadb(search_q, top_k=3)
-            context = build_context(chunks)
-
-            # Live sources for this specific issue
-            live = fetch_legal_sources(search_q, max_results=3)
-            if live:
-                context += "\n\nLIVE SOURCES (Indian Kanoon / SCI / eCourts):\n"
-                for i, r in enumerate(live):
-                    cit = f" | {r['citation']}" if r.get("citation") else ""
-                    context += (
-                        f"\nLIVE SOURCE {i+1}: {r['title']}"
-                        f"\nCourt: {r['court']} | Year: {r['year']}{cit}"
-                        f"\n{r['snippet']}\n---"
-                    )
-
-            irac_prompt = f"""You are a senior Indian advocate drafting a legal argument for a {request.client_position}.
+def _irac_prompt(request: "ArgumentRequest", issue: dict, context: str) -> str:
+    return f"""You are a senior Indian advocate drafting a legal argument for a {request.client_position}.
 Write a rigorous IRAC analysis for the issue below.
+
+{_PROCEDURAL_DIRECTIVE}
 
 CITATION RULES (strictly follow):
 - Every legal proposition MUST be supported by a cited case or statute
 - Use the full case name: e.g. "Maneka Gandhi v. Union of India (1978) 1 SCC 248"
 - State court and year: e.g. "Supreme Court, 1978" or "Delhi High Court, 2019"
+- Prefer authorities from AVAILABLE AUTHORITIES below; tag them [SOURCE N] / [LIVE SOURCE N]
 - If no case supports a proposition directly, write: "No direct authority cited. Verify independently."
 - Do NOT invent case names. If unsure of citation, flag it.
 - Do NOT use vague references like "it has been held" without naming the court and case
@@ -100,7 +92,43 @@ Return ONLY valid JSON:
   "conclusion":  "The legal outcome and specific relief available to {request.client_position}"
 }}{response_language_directive(request.response_language)}"""
 
-            irac_raw = call_qwen(irac_prompt, max_tokens=1200)
+
+@router.post("/api/argument")
+def build_argument(request: ArgumentRequest):
+    try:
+        # Step 1: Issue identification
+        issues_data = parse_json_robust(call_qwen(_issue_prompt(request), max_tokens=500))
+        issues      = issues_data.get("issues", [])
+
+        if not issues:
+            raise ValueError("Could not identify legal issues. Please provide more detailed facts.")
+
+        # Step 2: IRAC for each issue with live sources
+        irac_results   = []
+        all_precedents = []
+
+        for idx, issue in enumerate(issues):
+            search_q = f"{issue['issue']} {issue.get('area_of_law','')} {request.jurisdiction}"
+
+            # Local library — case law (real precedent) only; bare statutes
+            # are retrieved separately so the Constitution does not crowd out
+            # citeable authority.
+            chunks  = search_chromadb(search_q, top_k=3, exclude_doc_types=["statute"])
+            context = build_context(chunks)
+
+            # Live sources for this specific issue
+            live = fetch_legal_sources(search_q, max_results=3)
+            if live:
+                context += "\n\nLIVE SOURCES (Indian Kanoon / SCI / eCourts):\n"
+                for i, r in enumerate(live):
+                    cit = f" | {r['citation']}" if r.get("citation") else ""
+                    context += (
+                        f"\nLIVE SOURCE {i+1}: {r['title']}"
+                        f"\nCourt: {r['court']} | Year: {r['year']}{cit}"
+                        f"\n{r['snippet']}\n---"
+                    )
+
+            irac_raw = call_qwen(_irac_prompt(request, issue, context), max_tokens=1200)
             try:
                 irac = parse_json_robust(irac_raw)
             except Exception:
@@ -175,6 +203,13 @@ Return ONLY valid JSON:
                 "before filing or advancing these submissions."
             )
 
+        all_irac_text = " ".join(
+            f"{a['irac'].get('rule','')} {a['irac'].get('application','')}"
+            for a in irac_results
+        )
+        provenance = verify_citations(all_irac_text)
+        unverified = [c["citation"] for c in provenance if not c["verified"]]
+
         output = {
             "facts":           request.facts,
             "jurisdiction":    request.jurisdiction,
@@ -182,6 +217,8 @@ Return ONLY valid JSON:
             "total_issues":    len(issues),
             "arguments":       irac_results,
             "all_precedents":  all_precedents,
+            "citation_provenance": provenance,
+            "unverified_citations": unverified,
             "disclaimer":      disclaimer,
         }
 
@@ -223,24 +260,7 @@ def _argument_event_stream(request: "ArgumentRequest") -> Iterator[str]:
         yield _ndjson({"kind": "stage", "stage": "issues", "status": "active",
                        "message": "Reading instructions and identifying legal issues..."})
 
-        issue_prompt = f"""You are a senior Indian advocate reviewing instructions from a client.
-Identify the distinct legal issues in these facts. There are usually 2 to 4 issues.
-List each one separately. Be precise — this is a professional legal analysis.
-
-Facts: {request.facts}
-Court: {request.jurisdiction}
-Area of Law: {request.area_of_law}
-{f"Additional context: {request.extra_context}" if request.extra_context else ""}
-
-Return ONLY valid JSON, no explanation:
-{{
-  "issues": [
-    {{"issue": "precise legal question", "area_of_law": "specific area", "priority": "high/medium/low"}},
-    {{"issue": "precise legal question", "area_of_law": "specific area", "priority": "high/medium/low"}}
-  ]
-}}{response_language_directive(request.response_language)}"""
-
-        issues_data = parse_json_robust(call_qwen(issue_prompt, max_tokens=500))
+        issues_data = parse_json_robust(call_qwen(_issue_prompt(request), max_tokens=500))
         issues      = issues_data.get("issues", [])
 
         if not issues:
@@ -262,7 +282,7 @@ Return ONLY valid JSON, no explanation:
                            "message": f"Issue {idx + 1}: searching authorities..."})
 
             search_q = f"{issue['issue']} {issue.get('area_of_law', '')} {request.jurisdiction}"
-            chunks   = search_chromadb(search_q, top_k=3)
+            chunks   = search_chromadb(search_q, top_k=3, exclude_doc_types=["statute"])
             context  = build_context(chunks)
 
             live = fetch_legal_sources(search_q, max_results=3)
@@ -279,34 +299,7 @@ Return ONLY valid JSON, no explanation:
             yield _ndjson({"kind": "issue_progress", "index": idx, "phase": "drafting",
                            "message": f"Issue {idx + 1}: drafting IRAC submissions..."})
 
-            irac_prompt = f"""You are a senior Indian advocate drafting a legal argument for a {request.client_position}.
-Write a rigorous IRAC analysis for the issue below.
-
-CITATION RULES (strictly follow):
-- Every legal proposition MUST be supported by a cited case or statute
-- Use the full case name: e.g. "Maneka Gandhi v. Union of India (1978) 1 SCC 248"
-- State court and year: e.g. "Supreme Court, 1978" or "Delhi High Court, 2019"
-- If no case supports a proposition directly, write: "No direct authority cited. Verify independently."
-- Do NOT invent case names. If unsure of citation, flag it.
-- Do NOT use vague references like "it has been held" without naming the court and case
-
-FACTS: {request.facts}
-ISSUE: {issue['issue']}
-CLIENT POSITION: {request.client_position}
-COURT: {request.jurisdiction}
-
-AVAILABLE AUTHORITIES:
-{context}
-
-Return ONLY valid JSON:
-{{
-  "issue":       "The precise legal question raised",
-  "rule":        "The applicable statute and leading precedents with full citations [SOURCE N]",
-  "application": "How the rule applies specifically to these facts, distinguishing adverse cases [SOURCE N]",
-  "conclusion":  "The legal outcome and specific relief available to {request.client_position}"
-}}{response_language_directive(request.response_language)}"""
-
-            irac_raw = call_qwen(irac_prompt, max_tokens=1200)
+            irac_raw = call_qwen(_irac_prompt(request, issue, context), max_tokens=1200)
             try:
                 irac = parse_json_robust(irac_raw)
             except Exception:
@@ -383,6 +376,13 @@ Return ONLY valid JSON:
                 "before filing or advancing these submissions."
             )
 
+        all_irac_text = " ".join(
+            f"{a['irac'].get('rule','')} {a['irac'].get('application','')}"
+            for a in irac_results
+        )
+        provenance = verify_citations(all_irac_text)
+        unverified = [c["citation"] for c in provenance if not c["verified"]]
+
         output = {
             "facts":           request.facts,
             "jurisdiction":    request.jurisdiction,
@@ -390,6 +390,8 @@ Return ONLY valid JSON:
             "total_issues":    len(issues),
             "arguments":       irac_results,
             "all_precedents":  all_precedents,
+            "citation_provenance": provenance,
+            "unverified_citations": unverified,
             "disclaimer":      disclaimer,
         }
 
@@ -413,6 +415,8 @@ Return ONLY valid JSON:
         yield _ndjson({"kind": "complete",
                        "session_id":     session["id"],
                        "all_precedents": all_precedents,
+                       "citation_provenance": provenance,
+                       "unverified_citations": unverified,
                        "disclaimer":     disclaimer})
 
     except Exception as e:

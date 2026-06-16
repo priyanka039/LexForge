@@ -1,0 +1,27 @@
+# LexForge backend dependencies
+# Install: pip install -r requirements.txt
+
+# ── Web framework ─────────────────────────────
+fastapi>=0.115,<0.116
+starlette>=0.40,<0.47
+uvicorn[standard]>=0.30
+pydantic>=2.5,<3
+python-multipart>=0.0.9    # required for PDF upload (corpus)
+
+# ── HTTP / scraping (Research, Indian Kanoon fetch) ──
+httpx>=0.27
+requests>=2.31
+beautifulsoup4>=4.12       # legal_fetch.py, search_web.py
+
+# ── Vector DB & embeddings ────────────────────
+chromadb>=0.5
+ollama>=0.3
+
+# ── Document processing ───────────────────────
+pymupdf>=1.24              # fitz — PDF text extraction (corpus upload)
+llama-index-core>=0.14     # chunking (SentenceSplitter in corpus.py)
+reportlab>=4.0             # PDF export
+
+# ── Moot Chamber (optional but recommended) ─
+redis>=5.0                 # session store — in-memory fallback exists
+websockets>=12.0           # real-time voice WebSocket

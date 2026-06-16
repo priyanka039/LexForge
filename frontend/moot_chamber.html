@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Moot Chamber — LexForge</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,600&family=Source+Sans+3:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/moot_chamber.css">
+</head>
+<body class="mc-body">
+
+<!-- ── TOP NAV ─────────────────────────────────────────────────── -->
+<nav class="mc-topnav">
+  <a href="/app" class="mc-topnav-back">&larr; LexForge</a>
+  <span class="mc-topnav-title">Moot Chamber</span>
+  <span class="mc-topnav-badge">BETA</span>
+  <span class="mc-topnav-tagline">Argue before the bench. Alone.</span>
+</nav>
+
+<!-- ══ SCREEN 1 · PRE-CHAMBER SETUP ═══════════════════════════════ -->
+<div id="screen-setup" class="mc-screen mc-screen-setup active">
+  <div class="mc-setup-container">
+
+    <header class="mc-setup-header">
+      <div class="mc-seal">&#9878;</div>
+      <h1 class="mc-setup-title">Enter the Chamber</h1>
+      <p class="mc-setup-subtitle">Configure your practice session. Argue alone. Argue well.</p>
+    </header>
+
+    <!-- Section A · Case Details -->
+    <section class="mc-setup-section">
+      <h2 class="mc-section-label">Your Case</h2>
+      <div class="mc-input-group">
+        <label class="mc-label" for="case-name">Case name</label>
+        <input type="text" id="case-name" class="mc-input" placeholder="e.g. Prafulla Kumar Samal v. Union Bank of India" autocomplete="off">
+      </div>
+      <div class="mc-input-group">
+        <label class="mc-label">You are arguing for</label>
+        <div class="mc-radio-row" id="side-selector">
+          <button type="button" class="mc-radio active" data-value="petitioner">Petitioner</button>
+          <button type="button" class="mc-radio" data-value="respondent">Respondent</button>
+          <button type="button" class="mc-radio" data-value="appellant">Appellant</button>
+          <button type="button" class="mc-radio" data-value="state">State</button>
+        </div>
+      </div>
+      <div class="mc-input-group">
+        <label class="mc-label" for="case-statement">Brief statement of your case</label>
+        <textarea id="case-statement" class="mc-input mc-textarea" rows="3" placeholder="What are you arguing? What is the core proposition you will advance?"></textarea>
+      </div>
+      <div class="mc-input-group">
+        <label class="mc-label" for="statutes">Key statutes and provisions</label>
+        <input type="text" id="statutes" class="mc-input" placeholder="e.g. Article 21, Section 482 CrPC, Section 300 IPC" autocomplete="off">
+      </div>
+    </section>
+
+    <!-- Section B · Court Level -->
+    <section class="mc-setup-section">
+      <h2 class="mc-section-label">Court Level</h2>
+      <div class="mc-card-row" id="court-selector">
+        <button type="button" class="mc-card-choice" data-value="district">
+          <span class="mc-card-icon">&#127963;</span>
+          <span class="mc-card-title">District Court</span>
+          <span class="mc-card-desc">Fundamental skills. Strict procedure.</span>
+          <span class="mc-card-meta">Address the bench: “Your Honour”</span>
+        </button>
+        <button type="button" class="mc-card-choice active" data-value="high_court">
+          <span class="mc-card-icon">&#9878;</span>
+          <span class="mc-card-title">High Court</span>
+          <span class="mc-card-desc">Constitutional arguments. Bench intervention.</span>
+          <span class="mc-card-meta">Address the bench: “Your Lordship”</span>
+        </button>
+        <button type="button" class="mc-card-choice" data-value="supreme">
+          <span class="mc-card-icon">&#128220;</span>
+          <span class="mc-card-title">Supreme Court</span>
+          <span class="mc-card-desc">Constitutional morality. Jurisprudential depth.</span>
+          <span class="mc-card-meta">Address the bench: “My Lords”</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- Section C · Judge Personality -->
+    <section class="mc-setup-section">
+      <h2 class="mc-section-label">The Bench</h2>
+      <div class="mc-judge-row" id="judge-selector">
+        <button type="button" class="mc-judge-card" data-value="verma">
+          <span class="mc-judge-name">Justice A.K. Verma</span>
+          <span class="mc-judge-style">The Constitutional Philosopher</span>
+          <span class="mc-judge-desc">Patient on the surface. One devastating question at the end of every submission.</span>
+          <span class="mc-judge-tag">Best for: Constitutional, PIL</span>
+        </button>
+        <button type="button" class="mc-judge-card" data-value="mehta">
+          <span class="mc-judge-name">Justice S.K. Mehta</span>
+          <span class="mc-judge-style">The Technocrat</span>
+          <span class="mc-judge-desc">Maintainability first. Merits never, until procedure is satisfied. Interrupts freely.</span>
+          <span class="mc-judge-tag">Best for: Procedure, Civil, Evidence</span>
+        </button>
+        <button type="button" class="mc-judge-card active" data-value="sinha">
+          <span class="mc-judge-name">Justice R.P. Sinha</span>
+          <span class="mc-judge-style">The Skeptic</span>
+          <span class="mc-judge-desc">Quotes your own cases against you. Uses silence as a weapon. The hardest bench.</span>
+          <span class="mc-judge-tag">Best for: Hard cases, Competition</span>
+        </button>
+        <button type="button" class="mc-judge-card" data-value="krishnaswamy">
+          <span class="mc-judge-name">Justice M. Krishnaswamy</span>
+          <span class="mc-judge-style">The Activist</span>
+          <span class="mc-judge-desc">Warm to the individual, merciless to the State. Cites cases you haven't read.</span>
+          <span class="mc-judge-tag">Best for: Rights, PIL, Environment</span>
+        </button>
+        <button type="button" class="mc-judge-card" data-value="kaul">
+          <span class="mc-judge-name">Justice P. Kaul</span>
+          <span class="mc-judge-style">The Pragmatist</span>
+          <span class="mc-judge-desc">What should this court actually do? Show me a case where it was done before.</span>
+          <span class="mc-judge-tag">Best for: Commercial, Property</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- Section D · Experience Level -->
+    <section class="mc-setup-section">
+      <h2 class="mc-section-label">Your Level</h2>
+      <div class="mc-card-row" id="level-selector">
+        <button type="button" class="mc-card-choice" data-value="student">
+          <span class="mc-card-title">Law Student</span>
+          <span class="mc-card-desc">Competition prep. Learning the ropes.</span>
+        </button>
+        <button type="button" class="mc-card-choice active" data-value="junior">
+          <span class="mc-card-title">Junior Advocate</span>
+          <span class="mc-card-desc">Sharpening submissions. Building instinct.</span>
+        </button>
+        <button type="button" class="mc-card-choice" data-value="senior">
+          <span class="mc-card-title">Senior Advocate</span>
+          <span class="mc-card-desc">Full intensity. No quarter.</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- Section E · Session Options -->
+    <section class="mc-setup-section mc-options-section">
+      <h2 class="mc-section-label">Session Options</h2>
+      <div class="mc-options-grid">
+        <div class="mc-input-group">
+          <label class="mc-label" for="language-select">Language of argument</label>
+          <select id="language-select" class="mc-input mc-select">
+            <option value="en-IN">English</option>
+          </select>
+        </div>
+        <div class="mc-input-group">
+          <label class="mc-label" for="matter-select">Attach to Matter (optional)</label>
+          <select id="matter-select" class="mc-input mc-select">
+            <option value="">— No matter —</option>
+          </select>
+        </div>
+      </div>
+      <div class="mc-toggle-row">
+        <label class="mc-toggle-label">
+          <input type="checkbox" id="opt-citation" checked>
+          <span class="mc-toggle-track"></span>
+          Silent citation checking
+        </label>
+        <label class="mc-toggle-label">
+          <input type="checkbox" id="opt-weakness" checked>
+          <span class="mc-toggle-track"></span>
+          Weakness alerts during argument
+        </label>
+        <label class="mc-toggle-label">
+          <input type="checkbox" id="opt-transcript" checked>
+          <span class="mc-toggle-track"></span>
+          Show live transcript
+        </label>
+      </div>
+    </section>
+
+    <button id="enter-chamber-btn" class="mc-cta-button" type="button">Enter the Chamber</button>
+    <p class="mc-setup-footnote" id="setup-footnote"></p>
+
+  </div>
+</div>
+
+<!-- ══ SCREEN 2 · THE CHAMBER ═════════════════════════════════════ -->
+<div id="screen-chamber" class="mc-screen mc-screen-chamber">
+  <div class="mc-chamber-layout">
+
+    <!-- Left · The Bench -->
+    <aside class="mc-bench-panel">
+      <div class="mc-court-seal">&#9878;</div>
+      <div class="mc-court-label" id="bench-court-label">IN THE HIGH COURT</div>
+      <div class="mc-judge-label" id="bench-judge-name">JUSTICE R.P. SINHA</div>
+      <div class="mc-judge-sub" id="bench-judge-style">The Skeptic</div>
+
+      <div class="mc-session-status">
+        <span class="mc-live-dot" id="live-dot"></span>
+        <span id="session-timer">00:00:00</span>
+      </div>
+
+      <div class="mc-active-agent-panel">
+        <div class="mc-panel-sublabel">Active Agent</div>
+        <div class="mc-agent-row"><span class="mc-agent-name">Judge</span><span class="mc-agent-bar" data-agent="judge"></span></div>
+        <div class="mc-agent-row"><span class="mc-agent-name">Precedent</span><span class="mc-agent-bar" data-agent="precedent"></span></div>
+        <div class="mc-agent-row"><span class="mc-agent-name">Counter</span><span class="mc-agent-bar" data-agent="counter"></span></div>
+        <div class="mc-agent-row"><span class="mc-agent-name">Citation</span><span class="mc-agent-bar" data-agent="citation"></span></div>
+        <div class="mc-agent-row"><span class="mc-agent-name">Weakness</span><span class="mc-agent-bar" data-agent="weakness"></span></div>
+      </div>
+
+      <div class="mc-session-stats">
+        <div class="mc-panel-sublabel">This Session</div>
+        <div class="mc-stat-row"><span>Exchanges</span><span id="stat-exchanges">0</span></div>
+        <div class="mc-stat-row"><span>Citations used</span><span id="stat-citations">0</span></div>
+        <div class="mc-stat-row"><span>Flags</span><span id="stat-flags">0</span></div>
+      </div>
+
+      <button class="mc-end-session-btn" id="end-session-btn" type="button">End Session</button>
+    </aside>
+
+    <!-- Center · The Floor -->
+    <main class="mc-floor">
+      <div class="mc-case-divider"><span id="floor-case-name">MATTER UNDER ARGUMENT</span></div>
+
+      <div class="mc-transcript" id="transcript-feed">
+        <div class="mc-transcript-empty">The bench is being seated. Press <strong>Start Arguing</strong> when ready.</div>
+      </div>
+
+      <div class="mc-voice-viz" id="voice-viz">
+        <div class="mc-viz-bars" id="viz-bars"></div>
+        <div class="mc-viz-status" id="viz-status">Ready</div>
+      </div>
+
+      <div class="mc-floor-controls">
+        <button class="mc-btn-primary" id="record-btn" type="button">&#9679; Start Arguing</button>
+        <button class="mc-btn-secondary" id="download-btn" type="button">&darr; Transcript</button>
+      </div>
+    </main>
+
+    <!-- Right · Research Surfaced -->
+    <aside class="mc-research-panel">
+      <div class="mc-panel-sublabel">Cases Surfaced</div>
+      <div id="cases-feed" class="mc-cases-feed">
+        <div class="mc-cases-empty">Cases surfaced during argument will appear here. Ask the bench: “cases on…”</div>
+      </div>
+      <div class="mc-panel-sublabel" style="margin-top:18px">Citation Flags</div>
+      <div id="citation-flags-feed" class="mc-flags-feed">
+        <div class="mc-cases-empty">No flags.</div>
+      </div>
+    </aside>
+
+  </div>
+</div>
+
+<!-- ══ SCREEN 3 · POST-SESSION DEBRIEF ════════════════════════════ -->
+<div id="screen-debrief" class="mc-screen mc-screen-debrief">
+  <div class="mc-debrief-container">
+    <h1 class="mc-debrief-title">Session Complete</h1>
+    <div id="debrief-summary" class="mc-debrief-summary"></div>
+    <div id="debrief-scorecard" class="mc-scorecard"></div>
+    <div id="debrief-notes" class="mc-debrief-section"></div>
+    <div id="debrief-weaknesses" class="mc-debrief-section"></div>
+    <div id="debrief-cases" class="mc-debrief-section"></div>
+    <div id="debrief-transcript" class="mc-debrief-section"></div>
+    <div class="mc-debrief-actions">
+      <button class="mc-btn-primary" id="save-matter-btn" type="button">Save to Matter</button>
+      <button class="mc-btn-secondary" id="new-session-btn" type="button">New Session</button>
+    </div>
+  </div>
+</div>
+
+<script src="/static/moot_voice_client.js"></script>
+<script src="/static/moot_chamber_app.js"></script>
+</body>
+</html>

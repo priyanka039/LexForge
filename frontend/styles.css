@@ -190,6 +190,31 @@ html{scroll-behavior:smooth}
   --topbar-bg: rgba(16,8,5,0.94);
 }
 
+/* ── FORGE (logo palette: gunmetal charcoal + metallic gold + steel silver) ── */
+[data-theme="forge"] {
+  --void:   #14171C;
+  --s0:     #1A1E24;
+  --s1:     #21262D;
+  --s2:     #292F37;
+  --s3:     #333A44;
+  --s4:     #3E4651;
+  --gold:   #C7A35C;
+  --gold-b: #D8B670;
+  --gold-p: #E8CB90;
+  --gold-d: #8A6E34;
+  --gold-l: rgba(199,163,92,.24);
+  --gold-f: rgba(199,163,92,.07);
+  --gold-8: rgba(199,163,92,.12);
+  --cream:  #EEF0F3;
+  --silver: #C2C5CC;
+  --w60:    #AEB3BC;
+  --w40:    #767C86;
+  --w20:    #4A4F58;
+  --muted:  #767C86;
+  --accent: #C7A35C;
+  --topbar-bg: rgba(26,30,36,0.95);
+}
+
 /* ══════════════════════════════════════════════════
    GLOBAL BASE
    ══════════════════════════════════════════════════ */
@@ -314,6 +339,14 @@ body::after {
 }
 .nav-icon{font-size:13px;width:16px;text-align:center;flex-shrink:0;opacity:.8}
 
+/* Moot Chamber nav badge — additive, used only by .nav-item-moot */
+.nav-item-moot .nav-badge{
+  font-size:8px;font-weight:700;letter-spacing:.08em;
+  color:var(--gold);border:1px solid var(--gold-l);
+  padding:1px 5px;border-radius:2px;margin-left:4px;vertical-align:middle;
+  font-family:var(--body);flex-shrink:0;
+}
+
 .sb-history{flex:1;overflow-y:auto;padding:0 10px 10px;min-height:0}
 .matter-icon{
   flex-shrink:0;width:18px;height:18px;display:flex;align-items:center;justify-content:center;
@@ -363,6 +396,7 @@ body::after {
 .swatch-slate   {background:linear-gradient(135deg,#101620,#C4B896)}
 .swatch-copper  {background:linear-gradient(135deg,#0A222C,#C98C5D)}
 .swatch-auburn  {background:linear-gradient(135deg,#24140C,#D4B060)}
+.swatch-forge   {background:linear-gradient(135deg,#21262D 0%,#C2C5CC 50%,#C7A35C 100%)}
 .theme-swatch-name {
   font-family:var(--mono);font-size:9px;color:var(--w40);
   margin-left:auto;letter-spacing:.06em;
@@ -550,6 +584,12 @@ body::after {
   background:rgba(74,156,74,.1);border:1px solid rgba(74,156,74,.28);
   border-radius:2px;font-family:var(--mono);font-size:10.5px;
   color:#6abf6a;padding:1px 7px;margin:0 2px;font-weight:500;
+}
+.citation-unverified {
+  background:rgba(212,160,23,.12) !important;
+  border:1px solid rgba(212,160,23,.5) !important;
+  color:#e0b73c !important;
+  cursor:help;
 }
 .key-rule {
   border-left:2px solid var(--gold);padding:10px 14px;

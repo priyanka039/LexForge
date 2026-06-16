@@ -71,6 +71,7 @@ const THEMES = {
   slate:    { label:'Barrister Slate', swatch:'swatch-slate' },
   copper:   { label:'Teal Bench',     swatch:'swatch-copper' },
   auburn:   { label:'Auburn Brief',   swatch:'swatch-auburn' },
+  forge:    { label:'Forge',          swatch:'swatch-forge'  },
 };
 
 function applyTheme(theme) {
@@ -537,10 +538,11 @@ function plainTitlePreview(t) {
 
 // ── SESSIONS ──────────────────────────────────────────────────────────────────
 const SESSION_LABELS = {
-  research:   { label:'Precedent Research',    color:'#6090c8' },
-  argument:   { label:'Written Submissions',   color:'var(--gold)' },
-  opposition: { label:'Opposition Analysis',   color:'#c07060' },
-  debate:     { label:'Adversarial Hearing',   color:'#6abf6a' },
+  research:     { label:'Precedent Research',    color:'#6090c8' },
+  argument:     { label:'Written Submissions',   color:'var(--gold)' },
+  opposition:   { label:'Opposition Analysis',   color:'#c07060' },
+  debate:       { label:'Adversarial Hearing',   color:'#6abf6a' },
+  moot_chamber: { label:'Moot Chamber Hearing',  color:'#b48ad4' },
 };
 
 function renderSessionCards(sessions, container) {
@@ -599,6 +601,89 @@ function openSessionView(sessionId) {
   navigate('session', { sessionId });
 }
 
+// Render a saved Moot Chamber hearing: score, feedback, full transcript.
+function renderMootSession(output) {
+  const score      = output.score || {};
+  const overall    = output.overall != null ? output.overall : null;
+  const feedback   = output.feedback || {};
+  const transcript = output.transcript || [];
+  const cases      = output.cases_surfaced || [];
+  const flags      = output.citation_flags || [];
+  const durMin     = output.duration_seconds ? Math.round(output.duration_seconds / 60) : 0;
+
+  const roleLabel = (r) => ({
+    judge:   'The Bench', mooter: 'You (Counsel)', counter: 'Opposing Counsel',
+    precedent: 'Research', citation: 'Citation Note', weakness: 'Weakness Alert',
+  })[r] || (r || '').toUpperCase();
+  const roleColor = (r) => ({
+    judge:'#b48ad4', mooter:'var(--gold)', counter:'#c07060',
+    precedent:'#6090c8', citation:'#6abf6a', weakness:'#d4a017',
+  })[r] || 'var(--w60)';
+
+  const dims = ['structure','authority','responsiveness','precision','coherence'];
+  const scoreBars = dims.map(d => {
+    const v = score[d];
+    if (v == null) return '';
+    const pct = Math.max(0, Math.min(100, (v / 9.5) * 100));
+    return `<div style="margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;font-family:var(--mono);font-size:10px;color:var(--w60);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:4px">
+        <span>${d}</span><span style="color:var(--cream)">${v.toFixed(1)}/9.5</span>
+      </div>
+      <div style="height:5px;background:var(--void);border-radius:3px;overflow:hidden">
+        <div style="height:100%;width:${pct}%;background:${roleColor('mooter')}"></div>
+      </div>
+    </div>`;
+  }).join('');
+
+  if (!transcript.length && overall == null) {
+    return `<div class="card" style="border-color:rgba(180,138,212,0.3)">
+      <div class="card-title">No hearing recorded</div>
+      <div class="card-sub" style="margin-top:6px">This session ended before any exchanges were captured. Start a new hearing in the Moot Chamber and argue at least one submission.</div>
+    </div>`;
+  }
+
+  const transcriptHtml = transcript.length ? transcript.map(h => {
+    const role = h.role || '';
+    if (role === 'citation' || role === 'weakness') {
+      return `<div style="margin:8px 0;padding:8px 12px;border-left:2px solid ${roleColor(role)};background:var(--void);border-radius:3px">
+        <div style="font-family:var(--mono);font-size:9px;color:${roleColor(role)};text-transform:uppercase;letter-spacing:0.12em;margin-bottom:3px">${roleLabel(role)}</div>
+        <div style="font-size:13px;color:var(--w70);line-height:1.5">${escapeHtml(h.text || '')}</div>
+      </div>`;
+    }
+    return `<div style="margin:14px 0">
+      <div style="font-family:var(--mono);font-size:9.5px;color:${roleColor(role)};text-transform:uppercase;letter-spacing:0.12em;margin-bottom:4px">${roleLabel(role)}</div>
+      <div style="font-family:var(--legal);font-size:15px;color:var(--cream);line-height:1.6;${role==='judge'||role==='counter'?'font-style:italic':''}">${escapeHtml(h.text || '')}</div>
+    </div>`;
+  }).join('') : '<div style="color:var(--w40);font-size:13px;padding:8px 0">No transcript captured for this hearing.</div>';
+
+  return `
+    ${overall != null ? `<div class="card" style="border-color:rgba(180,138,212,0.3);margin-bottom:18px">
+      <div class="flex items-center gap-8 mb-16">
+        <div><div class="card-title">Hearing Assessment</div>
+        <div class="card-sub">${transcript.filter(h=>h.role==='mooter').length} submissions · ${durMin} min · ${cases.length} cases surfaced</div></div>
+        <span class="risk-badge" style="margin-left:auto;background:rgba(180,138,212,0.15);color:#b48ad4;border-color:rgba(180,138,212,0.4)">Overall ${overall}/9.5</span>
+      </div>
+      ${scoreBars}
+      ${feedback.overall_summary ? `<div style="margin-top:14px;font-family:var(--legal);font-size:15px;font-style:italic;color:var(--cream);line-height:1.6;border-left:3px solid #b48ad4;padding-left:14px">"${escapeHtml(feedback.overall_summary)}"</div>` : ''}
+      ${(() => {
+        const notes = [
+          ['Structure', feedback.structure_note],
+          ['Authority', feedback.authority_note],
+          ['Responsiveness', feedback.responsiveness_note],
+          ['Precision', feedback.precision_note],
+        ].filter(n => n[1]);
+        return notes.length ? `<div style="margin-top:14px;display:flex;flex-direction:column;gap:8px">${notes.map(([k,v])=>`<div style="font-size:13px;color:var(--w70);line-height:1.6"><strong style="color:var(--cream)">${k}:</strong> ${escapeHtml(v)}</div>`).join('')}</div>` : '';
+      })()}
+      ${(feedback.cases_to_know && feedback.cases_to_know.length) ? `<div style="margin-top:14px"><div style="font-family:var(--mono);font-size:9.5px;color:#d4a017;text-transform:uppercase;letter-spacing:0.12em;margin-bottom:6px">Cases You Should Know (surfaced but not used)</div><ul style="margin:0;padding-left:18px;color:var(--w70);font-size:13px;line-height:1.7">${feedback.cases_to_know.map(s=>`<li>${escapeHtml(s)}</li>`).join('')}</ul></div>` : ''}
+    </div>` : ''}
+    ${cases.length ? `<div class="card" style="margin-bottom:18px"><div class="card-title" style="margin-bottom:10px">Cases Surfaced</div>${cases.map(c=>`<div class="prec-item"><div class="prec-body"><div class="prec-name">${escapeHtml(c.case_name || c.title || c.name || 'Case')}</div>${c.snippet?`<div class="prec-snip">${escapeHtml(c.snippet)}</div>`:''}</div></div>`).join('')}</div>` : ''}
+    ${flags.length ? `<div class="card" style="margin-bottom:18px;border-color:rgba(212,160,23,0.4)"><div class="card-title" style="color:var(--gold);margin-bottom:8px">⚠ Citation Flags</div><ul style="margin:0;padding-left:18px;color:var(--w70);font-size:13px;line-height:1.7">${flags.map(f=>`<li>${escapeHtml(typeof f === 'string' ? f : (f.text || f.citation || JSON.stringify(f)))}</li>`).join('')}</ul></div>` : ''}
+    <div class="card" id="moot-transcript-body">
+      <div class="card-title" style="margin-bottom:12px">Hearing Transcript</div>
+      ${transcriptHtml}
+    </div>`;
+}
+
 async function loadSessionView(sessionId) {
   const container = document.getElementById('session-view-content');
   container.innerHTML = '<div style="color:var(--w40);font-size:13px;padding:12px">Loading saved session...</div>';
@@ -645,7 +730,13 @@ async function loadSessionView(sessionId) {
 
     } else if (session.session_type === 'argument') {
       const args = output.arguments || [];
-      contentHtml = args.map((arg, idx) => {
+      const unv = output.unverified_citations || [];
+      const argBanner = unv.length ? `
+        <div class="card" style="border-color:rgba(212,160,23,0.45);background:rgba(212,160,23,0.07);margin-bottom:18px">
+          <div class="card-title" style="color:var(--gold)">⚠ Verify before relying on this</div>
+          <div class="card-sub" style="font-size:13px;margin-top:4px">These authorities were not found in your uploaded corpus and may be from model memory: ${unv.map(c=>`<span class="citation-tag citation-unverified">${escapeHtml(c)} ⚠ verify</span>`).join(' ')}</div>
+        </div>` : '';
+      contentHtml = argBanner + args.map((arg, idx) => {
         const irac = arg.irac || {};
         return `
           <div style="margin-bottom:32px">
@@ -722,19 +813,38 @@ async function loadSessionView(sessionId) {
     } else if (session.session_type === 'debate') {
       const sm = output.summary || {};
       const rc = {HIGH:'risk-HIGH',MODERATE:'risk-MODERATE',LOW:'risk-LOW'}[sm.risk_level] || 'risk-MODERATE';
-      const renderPts = pts => (pts||[]).map(p=>`<div class="debate-point">${p.point||p}${p.citation?`<span class="citation-tag">${p.citation}</span>`:''}</div>`).join('');
+      const roles = output.roles || {plaintiff:'PETITIONER', defense:'RESPONDENT'};
+      const pRole = (roles.plaintiff||'PETITIONER').toUpperCase();
+      const dRole = (roles.defense||'RESPONDENT').toUpperCase();
+      const unverified = new Set((output.unverified_citations||[]).map(c => (c||'').toLowerCase()));
+      const citationTag = (cite) => {
+        if (!cite) return '';
+        return unverified.has(cite.toLowerCase())
+          ? `<span class="citation-tag citation-unverified" title="Not found in your uploaded corpus — verify before relying on it">${escapeHtml(cite)} ⚠ verify</span>`
+          : `<span class="citation-tag">${escapeHtml(cite)}</span>`;
+      };
+      const renderPts = pts => (pts||[]).map(p=>`<div class="debate-point">${escapeHtml(p.point||p||'')}${p.citation?citationTag(p.citation):''}</div>`).join('');
+      const warnings = output.warnings || [];
+      const warnBanner = warnings.length ? `
+        <div class="card" style="border-color:rgba(212,160,23,0.45);background:rgba(212,160,23,0.07);margin-bottom:18px">
+          <div class="card-title" style="color:var(--gold)">⚠ Verify before relying on this</div>
+          <ul style="margin:8px 0 0;padding-left:18px;color:var(--w70);font-size:13px;line-height:1.7">
+            ${warnings.map(w=>`<li>${escapeHtml(w)}</li>`).join('')}
+          </ul>
+        </div>` : '';
       const jn = output.judge_persona?.name || '';
       const jline = [jn, output.jurisdiction].filter(Boolean).join(' · ');
       contentHtml = `
+        ${warnBanner}
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
           <div style="font-family:var(--mono);font-size:10px;letter-spacing:0.15em;text-transform:uppercase;color:var(--w40)">Round 1</div>
           <div style="flex:1;height:1px;background:rgba(193,128,33,.1)"></div>
           <div style="font-family:var(--serif);font-size:14px;color:var(--gold);font-style:italic">Opening Submissions</div>
         </div>
         <div class="debate-grid mb-24">
-          <div class="debate-side debate-p"><div class="debate-hdr">PETITIONER</div><div class="debate-body">${renderPts(output.round1?.plaintiff)}</div></div>
+          <div class="debate-side debate-p"><div class="debate-hdr">${escapeHtml(pRole)}</div><div class="debate-body">${renderPts(output.round1?.plaintiff)}</div></div>
           <div class="debate-vs">vs</div>
-          <div class="debate-side debate-d"><div class="debate-hdr">RESPONDENT</div><div class="debate-body">${renderPts(output.round1?.defense)}</div></div>
+          <div class="debate-side debate-d"><div class="debate-hdr">${escapeHtml(dRole)}</div><div class="debate-body">${renderPts(output.round1?.defense)}</div></div>
         </div>
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
           <div style="font-family:var(--mono);font-size:10px;letter-spacing:0.15em;text-transform:uppercase;color:var(--w40)">Round 2</div>
@@ -742,9 +852,9 @@ async function loadSessionView(sessionId) {
           <div style="font-family:var(--serif);font-size:14px;color:var(--gold);font-style:italic">Rebuttal round · Sur-rebuttal</div>
         </div>
         <div class="debate-grid mb-24">
-          <div class="debate-side debate-p"><div class="debate-hdr">PETITIONER — REBUTTAL</div><div class="debate-body">${renderPts(output.round2?.plaintiff)}</div></div>
+          <div class="debate-side debate-p"><div class="debate-hdr">${escapeHtml(pRole)} — REBUTTAL</div><div class="debate-body">${renderPts(output.round2?.plaintiff)}</div></div>
           <div class="debate-vs">vs</div>
-          <div class="debate-side debate-d"><div class="debate-hdr">RESPONDENT — SUR-REBUTTAL</div><div class="debate-body">${renderPts(output.round2?.defense)}</div></div>
+          <div class="debate-side debate-d"><div class="debate-hdr">${escapeHtml(dRole)} — SUR-REBUTTAL</div><div class="debate-body">${renderPts(output.round2?.defense)}</div></div>
         </div>
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;margin-top:8px">
           <div style="font-family:var(--mono);font-size:10px;letter-spacing:0.15em;text-transform:uppercase;color:var(--w40)">Round 3</div>
@@ -758,22 +868,29 @@ async function loadSessionView(sessionId) {
             <span class="risk-badge ${rc}" style="margin-left:auto">Overall: ${sm.risk_level||'MODERATE'} Risk</span>
           </div>
           ${sm.judicial_observation ? `<div style="background:var(--void);border-left:3px solid var(--gold);padding:13px 16px;border-radius:4px;margin-bottom:18px"><div style="font-family:var(--mono);font-size:9.5px;color:var(--gold);letter-spacing:0.14em;text-transform:uppercase;margin-bottom:7px">From the Bench</div><div style="font-family:var(--legal);font-size:17px;font-style:italic;color:var(--cream);line-height:1.6;text-align:justify">"${escapeHtml(sm.judicial_observation)}"</div></div>` : ''}
+          ${sm.bench_question ? `<div style="background:var(--void);border-left:3px solid #b08d2b;padding:11px 16px;border-radius:4px;margin-bottom:18px"><div style="font-family:var(--mono);font-size:9.5px;color:#d4a017;letter-spacing:0.14em;text-transform:uppercase;margin-bottom:6px">The Hardest Question From The Bench</div><div style="font-family:var(--legal);font-size:15px;font-style:italic;color:var(--cream);line-height:1.6">"${escapeHtml(sm.bench_question)}"</div></div>` : ''}
           <div style="font-family:var(--legal);font-size:12pt;line-height:2;color:var(--w60);text-align:justify">
-            <strong style="color:var(--cream)">Assessment:</strong> ${sm.overall_assessment||'—'}<br/><br/>
-            <strong style="color:var(--cream)">Likely Outcome:</strong> ${sm.likely_outcome||'—'}<br/><br/>
-            <strong style="color:var(--cream)">Strategy:</strong> ${sm.strategic_recommendation||'—'}
+            <strong style="color:var(--cream)">Assessment:</strong> ${escapeHtml(sm.overall_assessment||'—')}<br/><br/>
+            <strong style="color:var(--cream)">Likely Outcome:</strong> ${escapeHtml(sm.likely_outcome||'—')}<br/><br/>
+            ${sm.outcome_comparison && !/^n\/a/i.test(sm.outcome_comparison) ? `<strong style="color:var(--cream)">Prediction vs Actual Outcome:</strong> ${escapeHtml(sm.outcome_comparison)}<br/><br/>` : ''}
+            <strong style="color:var(--cream)">Strategy:</strong> ${escapeHtml(sm.strategic_recommendation||'—')}
           </div>
+          ${(sm.risk_factors&&sm.risk_factors.length) ? `<div style="margin-top:16px"><div style="font-family:var(--mono);font-size:9.5px;color:var(--w40);letter-spacing:0.14em;text-transform:uppercase;margin-bottom:8px">Why ${escapeHtml(sm.risk_level||'MODERATE')} Risk</div><ul style="margin:0;padding-left:18px;color:var(--w70);font-size:13px;line-height:1.7">${sm.risk_factors.map(f=>`<li>${escapeHtml(f)}</li>`).join('')}</ul></div>` : ''}
         </div>`;
+
+    } else if (session.session_type === 'moot_chamber') {
+      contentHtml = renderMootSession(output);
     }
 
     const savedHtml = buildSavedInputSection(session);
     const backLbl    = sessionBackButtonLabel(_sessionReturn);
 
     const voiceRole = ({
-      research:   'researcher',
-      argument:   'petitioner',
-      opposition: 'opposition',
-      debate:     'judge',
+      research:     'researcher',
+      argument:     'petitioner',
+      opposition:   'opposition',
+      debate:       'judge',
+      moot_chamber: 'judge',
     })[session.session_type] || 'default';
 
     container.innerHTML = `
@@ -1047,6 +1164,118 @@ async function deleteFromLibrary(caseFile, btn) {
   } catch(e) { btn.disabled=false; btn.textContent='✕'; alert('Remove failed: '+e.message); }
 }
 
+// ── INDIAN KANOON AUTO-FETCH ──────────────────────────────────────────────────
+function openFetchCaseModal(prefillQuery) {
+  const q = document.getElementById('fetch-case-query');
+  const st = document.getElementById('fetch-case-status');
+  const res = document.getElementById('fetch-case-results');
+  if (q) q.value = (prefillQuery || '').trim();
+  if (st) st.textContent = '';
+  if (res) res.innerHTML = '<div style="color:var(--w40);font-size:12px;padding:8px 0">Search for a case name or describe the dispute.</div>';
+  openModal('modal-fetch-case');
+  if (q?.value) searchFetchCases();
+}
+
+async function searchFetchCases() {
+  const q   = document.getElementById('fetch-case-query')?.value?.trim();
+  const st  = document.getElementById('fetch-case-status');
+  const res = document.getElementById('fetch-case-results');
+  const btn = document.getElementById('fetch-case-search-btn');
+  if (!q) { alert('Enter a case name or legal issue to search.'); return; }
+  if (st) st.textContent = 'Searching Indian Kanoon...';
+  if (res) res.innerHTML = '';
+  if (btn) { btn.disabled = true; btn.textContent = 'Searching...'; }
+  try {
+    const data = await (await fetch(`${API}/api/corpus/search-cases`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
+      body: JSON.stringify({ query: q, max_results: 6 }),
+    })).json();
+    const hits = data.results || [];
+    if (st) {
+      const det = (data.detected_cases || []).length
+        ? `Detected: ${data.detected_cases.join(' · ')} · `
+        : '';
+      st.textContent = det + `${hits.length} judgment${hits.length !== 1 ? 's' : ''} found — import the best match to ground your research.`;
+    }
+    if (!hits.length) {
+      if (res) res.innerHTML = '<div style="color:var(--w40);font-size:13px;padding:12px 0">No judgments found. Try the full case name (e.g. "Bhajan Lal v State of Haryana") or a narrower issue.</div>';
+      return;
+    }
+    if (res) res.innerHTML = hits.map(r => `
+      <div class="prec-item" style="align-items:flex-start">
+        <div class="prec-body" style="flex:1">
+          <div class="prec-name">${escapeHtml(r.title)}${r.binding === 'Binding' ? '<span class="binding-tag binding">SC</span>' : ''}</div>
+          <div class="prec-meta">${escapeHtml(r.court)} · ${escapeHtml(r.year)} · ${escapeHtml(r.source || 'Indian Kanoon')}${r.relevance != null ? ` · match ${r.relevance}` : ''}</div>
+          <div class="prec-snip">${escapeHtml(r.snippet || '')}</div>
+          ${r.url ? `<a href="${r.url}" target="_blank" rel="noopener" style="font-size:10px;color:var(--gold);margin-top:4px;display:inline-block">Preview on Indian Kanoon →</a>` : ''}
+        </div>
+        <button class="btn btn-gold" type="button" style="font-size:11px;flex-shrink:0;margin-left:10px"
+                data-doc-id="${r.doc_id || ''}" onclick="importFetchCase(this.dataset.docId, this)">
+          Import
+        </button>
+      </div>`).join('');
+  } catch (e) {
+    if (st) st.textContent = '';
+    if (res) res.innerHTML = `<div style="color:#f87171;font-size:13px">Search failed: ${escapeHtml(e.message)}</div>`;
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Search'; }
+  }
+}
+
+async function importFetchCase(docId, btn) {
+  if (!docId) { alert('No document id — try another result.'); return; }
+  const q = document.getElementById('fetch-case-query')?.value?.trim() || '';
+  const origLabel = btn?.textContent;
+  if (btn) { btn.disabled = true; btn.textContent = 'Importing...'; }
+  try {
+    const res = await fetch(`${API}/api/corpus/fetch-case`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
+      body: JSON.stringify({ doc_id: docId, query: q }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(formatApiDetail(data.detail) || `Server error ${res.status}`);
+    showNotif(
+      data.status === 'already_exists' ? 'Already in library' : 'Judgment indexed',
+      data.message || `${data.case_name} — ${data.chunk_count} sections indexed.`,
+    );
+    const sc = document.getElementById('stat-corpus');
+    if (sc && data.corpus_size != null) sc.textContent = data.corpus_size;
+    await loadLibraryList();
+    closeModal('modal-fetch-case');
+  } catch (e) {
+    alert('Import failed: ' + (e.message || e));
+    if (btn) { btn.disabled = false; btn.textContent = origLabel || 'Import'; }
+  }
+}
+
+async function importLiveCase(docId, title) {
+  if (!docId) {
+    openFetchCaseModal(title || '');
+    return;
+  }
+  await importFetchCase(docId, null);
+}
+
+async function preflightCorpusForDebate(summary) {
+  try {
+    const status = await (await fetch(`${API}/api/corpus/status`)).json();
+    if (!status.thin_corpus) return true;
+    const msg = status.judgment_cases === 0
+      ? 'Your library has no indexed judgments. Debate will run on model memory only — citations may be inaccurate.\n\nFetch the case from Indian Kanoon first?'
+      : 'Your library has very few judgments. Fetch the case from Indian Kanoon for grounded arguments?\n\nFetch now / Continue without fetching / Cancel';
+    const choice = confirm(msg + '\n\nOK = Fetch from Indian Kanoon\nCancel = Continue without fetching');
+    if (choice) {
+      openFetchCaseModal(summary);
+      return false;
+    }
+    return true;
+  } catch (_) {
+    return true;
+  }
+}
+
 // ── EXPORT ────────────────────────────────────────────────────────────────────
 /** Matches backend PDF headings/footer (`document_locale`): `hi` vs `en`; `auto` → `en`. */
 function exportDocumentLocale(reportType, sessionInput) {
@@ -1150,7 +1379,17 @@ async function doResearch() {
     window._lastResearch = data;
 
     const live = data.live_results || [];
-    area.innerHTML = `
+    const provisions = data.provisions || [];
+    const corpusEmpty = !!data.corpus_empty;
+    const unverified = data.unverified_citations || [];
+    const fetchHint = data.fetch_suggestion || query;
+    const corpusBanner = corpusEmpty ? `
+      <div class="card" style="border-color:rgba(212,160,23,0.45);background:rgba(212,160,23,0.07);margin-bottom:16px">
+        <div class="card-title" style="color:var(--gold)">⚠ No judgments in your library</div>
+        <div class="card-sub" style="font-size:13px;margin-top:4px">This answer is drawn from model knowledge${live.length?' and live Indian Kanoon results':''}, not your uploaded record. Fetch the judgment to ground citations before relying on them in court.</div>
+        <button class="btn btn-gold" type="button" style="margin-top:12px;font-size:12px" onclick="openFetchCaseModal(${JSON.stringify(fetchHint)})">Fetch from Indian Kanoon</button>
+      </div>` : '';
+    area.innerHTML = corpusBanner + `
       <div class="result-actions" id="research-actions">
         <button class="btn btn-ghost voice-listen-btn" type="button"
                 data-target="research-answer-body" data-role="researcher"
@@ -1187,28 +1426,47 @@ async function doResearch() {
             <div class="card-title">Library Authorities</div>
             <div class="scroll-area">${renderPrecedentsHtml(data.precedents||[])}</div>
           </div>
+          ${provisions.length ? `<div class="card animate-in" style="margin-bottom:16px">
+            <div class="eyebrow" style="margin-bottom:4px">Statutory Material</div>
+            <div class="card-title">Provisions Cited</div>
+            <div class="card-sub">From statutes &amp; codes in your library</div>
+            <div class="scroll-area">${provisions.map(p=>`
+              <div class="prec-item">
+                <div class="prec-body">
+                  <div class="prec-name">${escapeHtml(p.case_name||p.title||'Provision')}</div>
+                  ${p.snippet?`<div class="prec-snip">${escapeHtml(p.snippet)}</div>`:''}
+                </div>
+              </div>`).join('')}</div>
+          </div>` : ''}
           ${live.length ? `<div class="card animate-in">
             <div class="eyebrow" style="margin-bottom:4px">Indian Kanoon Live</div>
             <div class="card-title">Recent Judgments <span class="live-badge">Updated</span></div>
             <div class="card-sub">Retrieved live from indiankanoon.org</div>
             <div class="scroll-area">${live.map(r=>`
-              <div class="prec-item">
-                <div class="prec-body">
-                  <div class="prec-name">${r.title}<span class="live-badge">Live</span></div>
-                  <div class="prec-meta">${r.court} · ${r.year}</div>
-                  <div class="prec-snip">${r.snippet||''}</div>
-                  <a href="${r.url}" target="_blank" style="font-size:10px;color:var(--gold);margin-top:4px;display:inline-block">View on Indian Kanoon →</a>
+              <div class="prec-item" style="align-items:flex-start">
+                <div class="prec-body" style="flex:1">
+                  <div class="prec-name">${escapeHtml(r.title)}<span class="live-badge">Live</span></div>
+                  <div class="prec-meta">${escapeHtml(r.court)} · ${escapeHtml(r.year)}${r.relevance != null ? ` · match ${r.relevance}` : ''}</div>
+                  <div class="prec-snip">${escapeHtml(r.snippet||'')}</div>
+                  <a href="${r.url}" target="_blank" rel="noopener" style="font-size:10px;color:var(--gold);margin-top:4px;display:inline-block">View on Indian Kanoon →</a>
                 </div>
+                ${r.doc_id ? `<button class="btn btn-ghost" type="button" style="font-size:10px;flex-shrink:0;margin-left:8px" data-doc-id="${r.doc_id}" onclick="importFetchCase(this.dataset.docId, this)">Import</button>` : ''}
               </div>`).join('')}</div>
           </div>` : ''}
         </div>
       </div>
       ${data.weak_result ? `<div class="upload-prompt"><div class="upload-prompt-title">⚠ Thin Library Coverage</div><div class="upload-prompt-desc">Your library has limited material on this point. Upload relevant judgments to strengthen the research base.</div><button class="btn btn-ghost" style="font-size:12px" onclick="openModal('modal-upload')">Add More Judgments</button></div>` : ''}`;
 
-    if (data.disclaimer) {
+    if (data.disclaimer || unverified.length) {
       const d = document.createElement('div');
       d.style.cssText='background:rgba(193,128,33,.06);border:1px solid rgba(193,128,33,.2);border-radius:2px;padding:13px 16px;margin-top:16px;font-family:var(--mono);font-size:11px;color:var(--gold-d);letter-spacing:.04em';
-      d.innerHTML = '<strong style="color:var(--gold)">Verification required:</strong> ' + data.disclaimer;
+      let html = '<strong style="color:var(--gold)">Verification required:</strong> ' + (data.disclaimer || 'Some citations could not be matched to your uploaded record.');
+      if (unverified.length) {
+        html += '<div style="margin-top:8px">Not found in your corpus: ' +
+          unverified.map(c=>`<span class="citation-tag citation-unverified" title="Not found in your uploaded corpus — verify before relying on it">${escapeHtml(c)} ⚠ verify</span>`).join(' ') +
+          '</div>';
+      }
+      d.innerHTML = html;
       area.appendChild(d);
     }
     showNotif('Research Memorandum Ready', `${data.total_sources} source${data.total_sources!==1?'s':''} retrieved.`);
@@ -1387,6 +1645,8 @@ async function doArgument() {
             total_issues:    args.length,
             arguments:       args,
             all_precedents:  evt.all_precedents || [],
+            citation_provenance:  evt.citation_provenance || [],
+            unverified_citations: evt.unverified_citations || [],
             disclaimer:      evt.disclaimer || null,
             session_id:      evt.session_id,
           };
@@ -1401,6 +1661,22 @@ async function doArgument() {
     if (!aggregated) throw new Error('Stream ended without a complete event');
     window._lastIrac       = aggregated;
     window._lastPrecedents = aggregated.all_precedents || [];
+
+    // Re-badge case citations that aren't grounded in the corpus. The issue
+    // bodies are rendered before the `complete` event arrives, so we mark the
+    // unverified ones now that we know which authorities couldn't be matched.
+    const unverifiedArg = (aggregated.unverified_citations || []).map(c => (c||'').toLowerCase());
+    if (unverifiedArg.length) {
+      const uset = new Set(unverifiedArg);
+      document.querySelectorAll('#arg-issues-grid .arg-issue-cases .citation-tag').forEach(tag => {
+        const name = (tag.textContent || '').trim().toLowerCase();
+        if (uset.has(name)) {
+          tag.classList.add('citation-unverified');
+          tag.title = 'Not found in your uploaded corpus — verify before relying on it';
+          if (!/⚠/.test(tag.textContent)) tag.textContent = tag.textContent + ' ⚠ verify';
+        }
+      });
+    }
 
     // Final action toolbar at the top of the output (Read aloud, PDF, etc.)
     const actions = document.getElementById('arg-actions');
@@ -1425,11 +1701,15 @@ async function doArgument() {
     if (status) status.innerHTML =
       `<span class="arg-stage-dot done"></span><span>${aggregated.total_issues} legal issue${aggregated.total_issues!==1?'s':''} addressed · filed to Instruction Log</span>`;
 
-    if (aggregated.disclaimer) {
+    if (aggregated.disclaimer || unverifiedArg.length) {
       const dWrap = document.getElementById('arg-stream-disclaimer');
+      const unvHtml = unverifiedArg.length
+        ? `<div style="margin-top:8px">Not found in your corpus: ${(aggregated.unverified_citations||[]).map(c=>`<span class="citation-tag citation-unverified" title="Not found in your uploaded corpus — verify before relying on it">${escapeHtml(c)} ⚠ verify</span>`).join(' ')}</div>`
+        : '';
       if (dWrap) dWrap.innerHTML = `
         <div class="arg-disclaimer">
-          <strong>Verification required:</strong> ${escapeHtml(aggregated.disclaimer)}
+          <strong>Verification required:</strong> ${escapeHtml(aggregated.disclaimer || 'Some cited authorities were not found in your uploaded corpus — verify before relying on them.')}
+          ${unvHtml}
         </div>`;
     }
     if (weakResult) {
@@ -1569,12 +1849,17 @@ async function doDebate() {
   const plaintiff    = document.getElementById('debate-plaintiff').value.trim();
   const defense      = document.getElementById('debate-defense').value.trim();
   const juris        = document.getElementById('debate-jurisdiction').value;
+  const proceeding   = document.getElementById('debate-proceeding')?.value || 'high_court';
+  const knownOutcome = document.getElementById('debate-outcome')?.value.trim() || '';
   const caseId       = document.getElementById('debate-case-select').value;
   const judgePersona = document.getElementById('debate-persona')?.value || 'strict_proceduralist';
   const respLang = document.getElementById('debate-lang')?.value || 'auto';
   const btn          = document.querySelector('#screen-debate .btn-gold');
   const area         = document.getElementById('debate-results');
   if (!summary) { alert('Please describe the case dispute.'); return; }
+
+  const proceed = await preflightCorpusForDebate(summary);
+  if (!proceed) return;
 
   setLoading(btn, 'Commencing hearing...');
   showJobStartedNotif('Court simulation started');
@@ -1584,7 +1869,8 @@ async function doDebate() {
     const res = await fetch(`${API}/api/debate`, {
       method:'POST', headers:{'Content-Type':'application/json','ngrok-skip-browser-warning':'true'},
       body: JSON.stringify({
-        case_summary:summary, jurisdiction:juris, plaintiff_position:plaintiff, defense_position:defense,
+        case_summary:summary, jurisdiction:juris, proceeding_level:proceeding,
+        plaintiff_position:plaintiff, defense_position:defense, known_outcome:knownOutcome,
         judge_persona:judgePersona, case_id:caseId?parseInt(caseId):null, response_language:respLang,
       })
     });
@@ -1594,7 +1880,31 @@ async function doDebate() {
 
     const sm = data.summary || {};
     const rc = {HIGH:'risk-HIGH',MODERATE:'risk-MODERATE',LOW:'risk-LOW'}[sm.risk_level] || 'risk-MODERATE';
-    const renderPts = pts => (pts||[]).map(p=>`<div class="debate-point">${p.point||p}${p.citation?`<span class="citation-tag">${p.citation}</span>`:''}</div>`).join('');
+    const roles = data.roles || {plaintiff:'PETITIONER', defense:'RESPONDENT'};
+    const pRole = (roles.plaintiff||'PETITIONER').toUpperCase();
+    const dRole = (roles.defense||'RESPONDENT').toUpperCase();
+
+    // Citations the model produced that are NOT backed by the corpus → must verify.
+    const unverified = new Set((data.unverified_citations||[]).map(c => (c||'').toLowerCase()));
+    const citationTag = (cite) => {
+      if (!cite) return '';
+      const isUnverified = unverified.has(cite.toLowerCase());
+      const badge = isUnverified
+        ? `<span class="citation-tag citation-unverified" title="Not found in your uploaded corpus — verify before relying on it">${escapeHtml(cite)} ⚠ verify</span>`
+        : `<span class="citation-tag">${escapeHtml(cite)}</span>`;
+      return badge;
+    };
+    const renderPts = pts => (pts||[]).map(p=>`<div class="debate-point">${escapeHtml(p.point||p||'')}${p.citation?citationTag(p.citation):''}</div>`).join('');
+
+    // Trust banner — no-docs / unverified-citation warnings from the backend.
+    const warnings = data.warnings || [];
+    const warnBanner = warnings.length ? `
+      <div class="card" style="border-color:rgba(212,160,23,0.45);background:rgba(212,160,23,0.07);margin-bottom:18px">
+        <div class="card-title" style="color:var(--gold)">⚠ Verify before relying on this</div>
+        <ul style="margin:8px 0 0;padding-left:18px;color:var(--w70);font-size:13px;line-height:1.7">
+          ${warnings.map(w=>`<li>${escapeHtml(w)}</li>`).join('')}
+        </ul>
+      </div>` : '';
 
     area.innerHTML = `
       <div class="result-actions">
@@ -1615,15 +1925,16 @@ async function doDebate() {
         </button>
       </div>
       <div id="debate-output-body">
+      ${warnBanner}
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
         <div style="font-family:var(--mono);font-size:10px;letter-spacing:0.15em;text-transform:uppercase;color:var(--w40)">Round 1</div>
         <div style="flex:1;height:1px;background:rgba(193,128,33,.1)"></div>
         <div style="font-family:var(--serif);font-size:14px;color:var(--gold);font-style:italic">Opening Submissions</div>
       </div>
       <div class="debate-grid mb-24">
-        <div class="debate-side debate-p"><div class="debate-hdr">PETITIONER</div><div class="debate-body">${renderPts(data.round1?.plaintiff)}</div></div>
+        <div class="debate-side debate-p"><div class="debate-hdr">${escapeHtml(pRole)}</div><div class="debate-body">${renderPts(data.round1?.plaintiff)}</div></div>
         <div class="debate-vs">vs</div>
-        <div class="debate-side debate-d"><div class="debate-hdr">RESPONDENT</div><div class="debate-body">${renderPts(data.round1?.defense)}</div></div>
+        <div class="debate-side debate-d"><div class="debate-hdr">${escapeHtml(dRole)}</div><div class="debate-body">${renderPts(data.round1?.defense)}</div></div>
       </div>
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
         <div style="font-family:var(--mono);font-size:10px;letter-spacing:0.15em;text-transform:uppercase;color:var(--w40)">Round 2</div>
@@ -1631,9 +1942,9 @@ async function doDebate() {
         <div style="font-family:var(--serif);font-size:14px;color:var(--gold);font-style:italic">Rebuttal round · Sur-rebuttal</div>
       </div>
       <div class="debate-grid mb-24">
-        <div class="debate-side debate-p"><div class="debate-hdr">PETITIONER — REBUTTAL</div><div class="debate-body">${renderPts(data.round2?.plaintiff)}</div></div>
+        <div class="debate-side debate-p"><div class="debate-hdr">${escapeHtml(pRole)} — REBUTTAL</div><div class="debate-body">${renderPts(data.round2?.plaintiff)}</div></div>
         <div class="debate-vs">vs</div>
-        <div class="debate-side debate-d"><div class="debate-hdr">RESPONDENT — SUR-REBUTTAL</div><div class="debate-body">${renderPts(data.round2?.defense)}</div></div>
+        <div class="debate-side debate-d"><div class="debate-hdr">${escapeHtml(dRole)} — SUR-REBUTTAL</div><div class="debate-body">${renderPts(data.round2?.defense)}</div></div>
       </div>
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;margin-top:8px">
         <div style="font-family:var(--mono);font-size:10px;letter-spacing:0.15em;text-transform:uppercase;color:var(--w40)">Round 3</div>
@@ -1646,11 +1957,14 @@ async function doDebate() {
           <span class="risk-badge ${rc}" style="margin-left:auto">Overall: ${sm.risk_level||'MODERATE'} Risk</span>
         </div>
         ${sm.judicial_observation ? `<div style="background:var(--void);border-left:3px solid var(--gold);padding:13px 16px;border-radius:4px;margin-bottom:18px"><div style="font-family:var(--mono);font-size:9.5px;color:var(--gold);letter-spacing:0.14em;text-transform:uppercase;margin-bottom:7px">From the Bench</div><div style="font-family:var(--legal);font-size:17px;font-style:italic;color:var(--cream);line-height:1.6;text-align:justify">"${escapeHtml(sm.judicial_observation)}"</div></div>` : ''}
+        ${sm.bench_question ? `<div style="background:var(--void);border-left:3px solid #b08d2b;padding:11px 16px;border-radius:4px;margin-bottom:18px"><div style="font-family:var(--mono);font-size:9.5px;color:#d4a017;letter-spacing:0.14em;text-transform:uppercase;margin-bottom:6px">The Hardest Question From The Bench</div><div style="font-family:var(--legal);font-size:15px;font-style:italic;color:var(--cream);line-height:1.6">"${escapeHtml(sm.bench_question)}"</div></div>` : ''}
         <div style="font-family:var(--legal);font-size:12pt;line-height:2;color:var(--w60);text-align:justify">
-          <strong style="color:var(--cream)">Assessment:</strong> ${sm.overall_assessment||'—'}<br/><br/>
-          <strong style="color:var(--cream)">Likely Outcome:</strong> ${sm.likely_outcome||'—'}<br/><br/>
-          <strong style="color:var(--cream)">Strategic Advice:</strong> ${sm.strategic_recommendation||'—'}
+          <strong style="color:var(--cream)">Assessment:</strong> ${escapeHtml(sm.overall_assessment||'—')}<br/><br/>
+          <strong style="color:var(--cream)">Likely Outcome:</strong> ${escapeHtml(sm.likely_outcome||'—')}<br/><br/>
+          ${sm.outcome_comparison && !/^n\/a/i.test(sm.outcome_comparison) ? `<strong style="color:var(--cream)">Prediction vs Actual Outcome:</strong> ${escapeHtml(sm.outcome_comparison)}<br/><br/>` : ''}
+          <strong style="color:var(--cream)">Strategic Advice:</strong> ${escapeHtml(sm.strategic_recommendation||'—')}
         </div>
+        ${(sm.risk_factors&&sm.risk_factors.length) ? `<div style="margin-top:16px"><div style="font-family:var(--mono);font-size:9.5px;color:var(--w40);letter-spacing:0.14em;text-transform:uppercase;margin-bottom:8px">Why ${escapeHtml(sm.risk_level||'MODERATE')} Risk</div><ul style="margin:0;padding-left:18px;color:var(--w70);font-size:13px;line-height:1.7">${sm.risk_factors.map(f=>`<li>${escapeHtml(f)}</li>`).join('')}</ul></div>` : ''}
         <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:18px">
           <button class="btn btn-ghost" onclick="navigate('opposition')">Devil's Advocate</button>
           <button class="btn btn-ghost" onclick="navigate('argument')">Revise Submissions</button>

@@ -2,7 +2,11 @@
 from fastapi  import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing   import Optional
-from utils    import search_chromadb, call_qwen, build_context, parse_json_robust, format_precedents, response_language_directive
+from utils    import (
+    search_chromadb, call_qwen, build_context, parse_json_robust,
+    format_precedents, response_language_directive,
+    verify_citations, corpus_is_empty,
+)
 from database import save_session
 
 router = APIRouter()
@@ -41,11 +45,24 @@ DEFAULT_PERSONA = "strict_proceduralist"
 class DebateRequest(BaseModel):
     case_summary:       str
     jurisdiction:       str           = "High Court of Delhi"
+    proceeding_level:   str           = ""     # trial | high_court | supreme | appeal
     plaintiff_position: str           = ""
     defense_position:   str           = ""
     judge_persona:      str           = DEFAULT_PERSONA
+    known_outcome:      str           = ""     # actual result, if a known/landmark case
     case_id:            Optional[int] = None
     response_language:  str           = "auto"  # auto | en | hi
+
+
+# Role labels differ by proceeding level — in HC a challenger is the
+# Petitioner; in an SC appeal the same party may be the Appellant or
+# Respondent. We surface this so labels are never silently wrong.
+PROCEEDING_ROLES = {
+    "trial":      ("Plaintiff/Prosecution", "Defendant/Accused"),
+    "high_court": ("Petitioner", "Respondent"),
+    "supreme":    ("Appellant", "Respondent"),
+    "appeal":     ("Appellant", "Respondent"),
+}
 
 
 def safe_parse(raw: str, key: str) -> list:
@@ -57,91 +74,162 @@ def safe_parse(raw: str, key: str) -> list:
         return [{"point": raw[:300], "citation": ""}]
 
 
+def _flatten(points: list, limit: int = 4) -> str:
+    """Render structured argument points (with citations) into prompt text."""
+    out = []
+    for i, a in enumerate(points[:limit], 1):
+        pt   = (a.get("point") or "").strip()
+        cite = (a.get("citation") or "").strip()
+        out.append(f"{i}. {pt}" + (f"  [Authority: {cite}]" if cite else ""))
+    return "\n".join(out) or "(no submissions recorded)"
+
+
 @router.post("/api/debate")
 def debate(request: DebateRequest):
     try:
         persona    = JUDGE_PERSONAS.get(request.judge_persona, JUDGE_PERSONAS[DEFAULT_PERSONA])
         judge_sys  = persona["prompt"]
         judge_name = persona["name"]
+        lang       = response_language_directive(request.response_language)
 
-        chunks  = search_chromadb(request.case_summary, top_k=5)
+        level            = (request.proceeding_level or "high_court").lower()
+        p_role, d_role   = PROCEEDING_ROLES.get(level, PROCEEDING_ROLES["high_court"])
+        forum            = request.jurisdiction
+
+        # Case law and statute provisions retrieved separately so a bare act
+        # cannot crowd out citeable precedent in the authorities panel.
+        case_chunks    = search_chromadb(
+            request.case_summary, top_k=5, exclude_doc_types=["statute"]
+        )
+        statute_chunks = search_chromadb(
+            request.case_summary, top_k=2, doc_types=["statute"], min_score=0.40
+        )
+        chunks  = case_chunks + statute_chunks
         context = build_context(chunks)
-        lang    = response_language_directive(request.response_language)
+        no_docs = corpus_is_empty() or not chunks
+
+        # Lawyers need the WINNING ground, not generic points. Force counsel to
+        # lead with the strongest procedural / special-act ground first.
+        lead_directive = (
+            "Lead with the single STRONGEST procedural, jurisdictional, or special-statute "
+            "ground first (e.g. for the Prevention of Corruption Act check designated-officer "
+            "sanction under S.5A; for NDPS check S.50; for POCSO check mandatory procedure), "
+            "THEN substantive grounds. Do not bury the winning point among generic ones."
+        )
 
         # ── Round 1: Opening Submissions ──────────────────────
         p_opening = safe_parse(call_qwen(
-            f"""You are Petitioner's Senior Counsel making opening submissions in {request.jurisdiction}.
+            f"""You are {p_role}'s Senior Counsel making OPENING submissions before {forum}.
 CASE: {request.case_summary}
 {f"YOUR POSITION: {request.plaintiff_position}" if request.plaintiff_position else ""}
 JUDGE'S TEMPERAMENT: {judge_sys}
 RELEVANT AUTHORITIES:
 {context}
 
-Draft 3 strong opening submission points. Tailor them to this judge's temperament.
-Cite specific cases or statutes where possible.
+{lead_directive}
+Draft 3-4 opening submission points, strongest first. Tailor to this judge's temperament.
+Cite a specific case or statute for each point where one genuinely supports it; if none does, set citation to "" rather than inventing one.
 Return ONLY valid JSON (all string values must follow OUTPUT LANGUAGE below):
-{{"arguments":[{{"point":"Your submission point","citation":"Case name or statute"}}]}}{lang}""",
-            max_tokens=800), "arguments")
+{{"arguments":[{{"point":"Your submission point","citation":"Case name or statute, or empty"}}]}}{lang}""",
+            max_tokens=900), "arguments")
 
         d_opening = safe_parse(call_qwen(
-            f"""You are Respondent's Counsel making opening submissions in {request.jurisdiction}.
+            f"""You are {d_role}'s Senior Counsel making OPENING submissions before {forum}, opposing the {p_role}.
 CASE: {request.case_summary}
 {f"YOUR POSITION: {request.defense_position}" if request.defense_position else ""}
 JUDGE'S TEMPERAMENT: {judge_sys}
 RELEVANT AUTHORITIES:
 {context}
 
-Draft 3 strong opening submission points opposing the Petitioner. Tailor to this judge's temperament.
+{lead_directive}
+Draft 3-4 opening submission points opposing the {p_role}, strongest first.
+Cite a specific case or statute only where one genuinely supports the point; otherwise citation "".
 Return ONLY valid JSON (all string values must follow OUTPUT LANGUAGE below):
-{{"arguments":[{{"point":"Your submission point","citation":"Case name or statute"}}]}}{lang}""",
-            max_tokens=800), "arguments")
+{{"arguments":[{{"point":"Your submission point","citation":"Case name or statute, or empty"}}]}}{lang}""",
+            max_tokens=900), "arguments")
 
-        # ── Round 2: Rebuttal round (P) + Sur-rebuttal (R) ─────
-        # NOTE: p_sum = what PETITIONER argued (from p_opening)
-        #       d_sum = what RESPONDENT argued (from d_opening)
-        p_sum = " | ".join([a.get("point", "") for a in p_opening[:3]])
-        d_sum = " | ".join([a.get("point", "") for a in d_opening[:3]])
+        # ── Round 2: Rebuttals — now threaded with the FULL opponent round ──
+        p_open_txt = _flatten(p_opening)
+        d_open_txt = _flatten(d_opening)
 
         p_rebuttal = safe_parse(call_qwen(
-            f"""You are Petitioner's Counsel in Rebuttal.
-The Respondent argued in opening: {d_sum}
+            f"""You are {p_role}'s Counsel in REBUTTAL before {forum}.
+YOUR OWN OPENING (do NOT merely repeat it):
+{p_open_txt}
+
+THE {d_role.upper()}'S FULL OPENING you must now answer:
+{d_open_txt}
+
 JUDGE: {judge_sys}
 AUTHORITIES: {context}
-Rebut each of Respondent's points directly and specifically.
-Return ONLY valid JSON (all string values must follow OUTPUT LANGUAGE below):
-{{"rebuttals":[{{"point":"Your rebuttal","citation":"Case or statute"}}]}}{lang}""",
-            max_tokens=700), "rebuttals")
 
+Directly address at least TWO specific points the {d_role} made above — name the point and dismantle it.
+Do NOT restate your opening. Escalate: be sharper and more specific than the opening round.
+Return ONLY valid JSON (all string values must follow OUTPUT LANGUAGE below):
+{{"rebuttals":[{{"point":"Your rebuttal to a specific opposing point","citation":"Case or statute, or empty"}}]}}{lang}""",
+            max_tokens=800), "rebuttals")
+
+        # Sur-rebuttal sees BOTH the petitioner's opening and the petitioner's rebuttal.
+        p_reb_txt = _flatten(p_rebuttal)
         d_rebuttal = safe_parse(call_qwen(
-            f"""You are Respondent's Counsel in Sur-Rebuttal.
-The Petitioner argued in opening: {p_sum}
+            f"""You are {d_role}'s Counsel in SUR-REBUTTAL before {forum}.
+YOUR OWN OPENING (do NOT merely repeat it):
+{d_open_txt}
+
+THE {p_role.upper()}'S OPENING:
+{p_open_txt}
+THE {p_role.upper()}'S REBUTTAL you must now answer:
+{p_reb_txt}
+
 JUDGE: {judge_sys}
 AUTHORITIES: {context}
-Rebut each of Petitioner's points directly and specifically.
+
+Directly answer at least TWO specific points from the {p_role}'s rebuttal above. Do NOT restate your opening.
+Escalate: this is your last word — make it the sharpest exchange of the hearing.
 Return ONLY valid JSON (all string values must follow OUTPUT LANGUAGE below):
-{{"rebuttals":[{{"point":"Your rebuttal","citation":"Case or statute"}}]}}{lang}""",
-            max_tokens=700), "rebuttals")
+{{"rebuttals":[{{"point":"Your sur-rebuttal to a specific point","citation":"Case or statute, or empty"}}]}}{lang}""",
+            max_tokens=800), "rebuttals")
 
-        # ── Round 3: Judicial Observations (Bench) ───────────
+        # ── Round 3: Judicial Observations — judge now sees ALL FOUR exchanges ──
+        d_reb_txt = _flatten(d_rebuttal)
+        outcome_directive = ""
+        if request.known_outcome.strip():
+            outcome_directive = (
+                f"\nThe ACTUAL recorded outcome of this matter is: {request.known_outcome.strip()}\n"
+                "In 'outcome_comparison', compare your prediction to this actual outcome and state "
+                "whether it is a MATCH, PARTIAL MATCH, or MISS, with one line of reasoning."
+            )
+
         summary_raw = call_qwen(
-            f"""You are {judge_name} presiding over this matter in {request.jurisdiction}.
+            f"""You are {judge_name} presiding in {forum} ({p_role} v. {d_role}).
 CASE: {request.case_summary}
-PETITIONER SUBMITTED: {p_sum}
-RESPONDENT SUBMITTED: {d_sum}
-YOUR JUDICIAL TEMPERAMENT: {judge_sys}
 
-Give your judicial observations as this specific judge would — in your voice, from the bench.
+{p_role.upper()} OPENING:
+{p_open_txt}
+{d_role.upper()} OPENING:
+{d_open_txt}
+{p_role.upper()} REBUTTAL:
+{p_reb_txt}
+{d_role.upper()} SUR-REBUTTAL:
+{d_reb_txt}
+
+YOUR JUDICIAL TEMPERAMENT: {judge_sys}
+Weigh the REBUTTAL exchanges, not just the openings. Ask the hard question each side left unanswered.{outcome_directive}
+
 Return ONLY valid JSON (all string values must follow OUTPUT LANGUAGE below):
 {{
-  "overall_assessment": "2-3 sentence balanced analysis of both sides",
+  "overall_assessment": "2-3 sentence analysis weighing both openings AND rebuttals",
   "plaintiff_strength": "HIGH or MODERATE or LOW",
   "defense_strength": "HIGH or MODERATE or LOW",
   "likely_outcome": "1-2 sentence prediction",
-  "strategic_recommendation": "Specific litigation advice for the weaker party",
+  "outcome_comparison": "{'MATCH/PARTIAL/MISS vs actual outcome with reasoning' if request.known_outcome.strip() else 'N/A — no known outcome supplied'}",
   "risk_level": "HIGH or MODERATE or LOW",
-  "judicial_observation": "What you as this specific judge would say from the bench — in first person, direct"
+  "risk_factors": ["2-3 specific factors driving the risk rating, one line each"],
+  "strategic_recommendation": "Specific litigation advice for the weaker party",
+  "bench_question": "The single hardest question you would put to counsel from the bench",
+  "judicial_observation": "What you as this specific judge would say from the bench — first person, direct"
 }}{lang}""",
-            max_tokens=900)
+            max_tokens=1000)
 
         try:
             summary = parse_json_robust(summary_raw)
@@ -151,19 +239,50 @@ Return ONLY valid JSON (all string values must follow OUTPUT LANGUAGE below):
                 "plaintiff_strength":       "MODERATE",
                 "defense_strength":         "MODERATE",
                 "likely_outcome":           "Outcome uncertain on present pleadings.",
-                "strategic_recommendation": "Obtain senior counsel's opinion before the next date.",
+                "outcome_comparison":       "N/A",
                 "risk_level":               "MODERATE",
-                "judicial_observation":     ""
+                "risk_factors":             ["Assessment could not be fully parsed — review the transcript."],
+                "strategic_recommendation": "Obtain senior counsel's opinion before the next date.",
+                "bench_question":           "",
+                "judicial_observation":     "",
             }
 
+        # ── Citation provenance across every generated point ──
+        all_text = " ".join(
+            (a.get("point", "") + " " + a.get("citation", ""))
+            for a in (p_opening + d_opening + p_rebuttal + d_rebuttal)
+        )
+        provenance = verify_citations(all_text, grounded_chunks=case_chunks)
+        unverified = [c["citation"] for c in provenance if not c["verified"]]
+
+        warnings = []
+        if no_docs:
+            warnings.append(
+                "No case judgments were retrieved for this matter. Arguments are based on model "
+                "knowledge only and MAY BE INACCURATE. Use 'Fetch from Indian Kanoon' to import "
+                "the judgment into your library before relying on this hearing."
+            )
+        if unverified:
+            warnings.append(
+                "These cited authorities are not in your corpus and may be from model memory — "
+                "verify before use: " + "; ".join(unverified[:6])
+            )
+
         output = {
-            "case_summary":  request.case_summary,
-            "jurisdiction":  request.jurisdiction,
-            "judge_persona": persona,
-            "round1":        {"plaintiff": p_opening,  "defense": d_opening},
-            "round2":        {"plaintiff": p_rebuttal, "defense": d_rebuttal},
-            "summary":       summary,
-            "precedents":    format_precedents(chunks),
+            "case_summary":     request.case_summary,
+            "jurisdiction":     request.jurisdiction,
+            "proceeding_level": level,
+            "roles":            {"plaintiff": p_role, "defense": d_role},
+            "judge_persona":    persona,
+            "round1":           {"plaintiff": p_opening,  "defense": d_opening},
+            "round2":           {"plaintiff": p_rebuttal, "defense": d_rebuttal},
+            "summary":          summary,
+            "precedents":       format_precedents(case_chunks),
+            "provisions":       format_precedents(statute_chunks),
+            "citation_provenance": provenance,
+            "unverified_citations": unverified,
+            "corpus_empty":     no_docs,
+            "warnings":         warnings,
         }
 
         session = save_session(
@@ -172,9 +291,11 @@ Return ONLY valid JSON (all string values must follow OUTPUT LANGUAGE below):
             input_data   = {
                 "case_summary":       request.case_summary,
                 "jurisdiction":       request.jurisdiction,
+                "proceeding_level":   level,
                 "plaintiff_position": request.plaintiff_position,
                 "defense_position":   request.defense_position,
                 "judge_persona":      request.judge_persona,
+                "known_outcome":      request.known_outcome,
                 "response_language":  request.response_language,
             },
             output_data  = output,

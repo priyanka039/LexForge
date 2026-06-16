@@ -33,6 +33,8 @@
     <a class="nav-item" onclick="navigate('argument')">Argument Builder</a>
     <a class="nav-item" onclick="navigate('opposition')">Devil's Advocate</a>
     <a class="nav-item" onclick="navigate('debate')">Debate Simulation</a>
+    <!-- Moot Chamber — 5th feature, standalone page -->
+    <a class="nav-item nav-item-moot" href="/moot-chamber">Moot Chamber <span class="nav-badge">BETA</span></a>
   </div>
 
   <div class="sb-history" id="sb-history">
@@ -53,6 +55,7 @@
       <div class="theme-swatch swatch-slate"    data-theme="slate"    title="Barrister Slate"></div>
       <div class="theme-swatch swatch-copper"   data-theme="copper"   title="Teal Bench"></div>
       <div class="theme-swatch swatch-auburn"   data-theme="auburn"   title="Auburn Brief"></div>
+      <div class="theme-swatch swatch-forge"    data-theme="forge"    title="Forge (Gunmetal · Gold · Steel)"></div>
     </div>
   </div>
 
@@ -203,7 +206,8 @@
           <option>NCLAT</option>
         </select>
         <label style="display:flex;align-items:center;gap:7px;font-family:var(--mono);font-size:11px;color:var(--w40);cursor:pointer;white-space:nowrap;flex-shrink:0">
-          <input type="checkbox" id="use-internet" checked style="accent-color:var(--gold);width:14px;height:14px"/> Indian Kanoon
+          <input type="checkbox" id="use-internet" checked style="accent-color:var(--gold);width:14px;height:14px"/> Indian Kanoon live
+          <button class="btn btn-ghost" type="button" style="font-size:11px;padding:4px 10px" onclick="openFetchCaseModal(document.getElementById('research-query')?.value||'')">Import judgment</button>
         </label>
         <select class="form-select" style="width:200px" id="research-case-select">
           <option value="">File under brief (optional)</option>
@@ -314,6 +318,7 @@
                 <option value="hi">हिन्दी</option>
               </select>
             </div>
+            <button class="btn btn-ghost" style="width:100%;font-size:12px;margin-bottom:6px" type="button" onclick="openFetchCaseModal(document.getElementById('arg-facts')?.value||'')">Fetch case from Indian Kanoon</button>
             <button class="btn btn-gold" style="width:100%" onclick="doArgument()">Draft Submissions</button>
           </div>
         </div>
@@ -412,8 +417,22 @@
               <label class="label">Which Court</label>
               <select class="form-select" id="debate-jurisdiction">
                 <option>High Court of Delhi</option><option>Supreme Court of India</option>
-                <option>High Court of Bombay</option><option>High Court of Madras</option><option>NCLAT</option>
+                <option>High Court of Bombay</option><option>High Court of Madras</option>
+                <option>Punjab &amp; Haryana High Court</option><option>NCLAT</option>
               </select>
+            </div>
+            <div class="form-group" style="margin:0">
+              <label class="label">Proceeding Level</label>
+              <select class="form-select" id="debate-proceeding" title="Determines party role labels (Petitioner/Appellant)">
+                <option value="trial">Trial Court (Plaintiff / Defendant)</option>
+                <option value="high_court" selected>High Court (Petitioner / Respondent)</option>
+                <option value="supreme">Supreme Court (Appellant / Respondent)</option>
+                <option value="appeal">Appeal (Appellant / Respondent)</option>
+              </select>
+            </div>
+            <div class="form-group" style="margin:0">
+              <label class="label">Known Outcome (Optional — for landmark cases)</label>
+              <input class="form-input" id="debate-outcome" placeholder="e.g. SC quashed FIR on S.5A(1) PCA grounds" />
             </div>
             <div class="persona-wrap" style="margin:0">
               <span class="persona-label">Simulated Bench</span>
@@ -447,7 +466,8 @@
               </ol>
               <div style="margin-top:10px;font-family:var(--mono);font-size:10px;color:var(--w20);letter-spacing:.04em">Typical runtime ~10 minutes of reading.</div>
             </div>
-            <button class="btn btn-gold" style="width:100%;margin-top:auto" onclick="doDebate()">Commence Hearing</button>
+            <button class="btn btn-ghost" style="width:100%;margin-top:4px;font-size:12px" type="button" onclick="openFetchCaseModal(document.getElementById('debate-summary')?.value||'')">Fetch case from Indian Kanoon</button>
+            <button class="btn btn-gold" style="width:100%;margin-top:8px" onclick="doDebate()">Commence Hearing</button>
           </div>
         </div>
       </div>
@@ -590,6 +610,32 @@
     </div>
     <div style="display:flex;justify-content:flex-end;margin-top:12px">
       <button class="btn btn-ghost" onclick="closeModal('modal-export')">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Fetch case from Indian Kanoon -->
+<div id="modal-fetch-case" class="modal-overlay">
+  <div class="modal-box" style="width:620px;max-height:85vh;overflow:hidden;display:flex;flex-direction:column">
+    <div class="modal-hdr">
+      <div>
+        <div style="font-family:var(--mono);font-size:9.5px;color:var(--gold);letter-spacing:.22em;text-transform:uppercase;margin-bottom:4px">Indian Kanoon · SCI · eCourts</div>
+        <div style="font-family:var(--serif);font-size:20px;font-weight:700;color:var(--cream)">Fetch &amp; Index Judgment</div>
+      </div>
+      <button class="modal-close" onclick="closeModal('modal-fetch-case')">&#215;</button>
+    </div>
+    <p style="font-size:13px;color:var(--w60);margin:0 0 12px;line-height:1.6">Search public Indian legal databases, download the full judgment, and index it in your library so Research, Debate, and Argument Builder can cite grounded authorities — not model memory.</p>
+    <div class="form-group" style="margin-bottom:12px">
+      <label class="label">Case name or legal issue</label>
+      <div style="display:flex;gap:8px">
+        <input class="form-input" id="fetch-case-query" placeholder="e.g. Bhajan Lal v State of Haryana" style="flex:1" />
+        <button class="btn btn-gold" type="button" id="fetch-case-search-btn" onclick="searchFetchCases()">Search</button>
+      </div>
+    </div>
+    <div id="fetch-case-status" style="font-family:var(--mono);font-size:11px;color:var(--w40);margin-bottom:10px"></div>
+    <div id="fetch-case-results" class="scroll-area" style="flex:1;min-height:120px;max-height:340px"></div>
+    <div style="display:flex;justify-content:flex-end;margin-top:12px;gap:8px">
+      <button class="btn btn-ghost" onclick="closeModal('modal-fetch-case')">Close</button>
     </div>
   </div>
 </div>

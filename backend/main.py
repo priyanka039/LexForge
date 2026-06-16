@@ -87,6 +87,8 @@ from routes.cases_router    import router as cases_router
 from routes.sessions_router import router as sessions_router
 from routes.search_web      import router as search_web_router
 from routes.voice           import router as voice_router
+from moot.router            import router as moot_router
+from moot.router            import router as moot_router
 
 from config   import collection, CHAT_MODEL, EMBED_MODEL
 from database import init_db
@@ -111,6 +113,8 @@ app.include_router(cases_router)
 app.include_router(sessions_router)
 app.include_router(search_web_router)
 app.include_router(voice_router)
+app.include_router(moot_router)
+app.include_router(moot_router)
 
 
 @app.on_event("startup")
@@ -148,6 +152,14 @@ if FRONTEND_DIR.exists():
     @app.get("/landing", response_class=FileResponse)
     def serve_landing():
         return FileResponse(FRONTEND_DIR / "landing.html")
+
+    @app.get("/moot-chamber", response_class=FileResponse)
+    def serve_moot_chamber():
+        return FileResponse(FRONTEND_DIR / "moot_chamber.html")
+
+    @app.get("/moot-chamber", response_class=FileResponse)
+    def serve_moot_chamber():
+        return FileResponse(FRONTEND_DIR / "moot_chamber.html")
 
     # Serve CSS, JS, images etc.
     app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")

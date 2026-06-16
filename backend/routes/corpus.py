@@ -22,11 +22,15 @@ import fitz                     # pymupdf — reads PDFs
 import ollama
 
 from fastapi    import APIRouter, HTTPException, UploadFile, File
+from pydantic   import BaseModel
+from typing     import Optional
 from config     import collection, EMBED_MODEL, RAW_PDFS_FOLDER
 from llama_index.core             import Document
 from llama_index.core.node_parser import SentenceSplitter
 
 router = APIRouter()
+
+RAW_TEXTS_FOLDER = os.path.join(os.path.dirname(RAW_PDFS_FOLDER), "raw_texts")
 
 
 def _library_pdf_path(filename: str) -> str:
@@ -120,12 +124,19 @@ def detect_metadata(text: str, filename: str) -> dict:
         if 10 < len(extracted) < 120:
             case_name = extracted
 
+    try:
+        from utils import classify_doc_type
+        doc_type = classify_doc_type(text, filename)
+    except Exception:
+        doc_type = "judgment"
+
     return {
         "case_name":   case_name,
         "court":       court,
         "year":        year,
         "case_file":   os.path.splitext(filename)[0],
-        "area_of_law": "General"
+        "area_of_law": "General",
+        "doc_type":    doc_type,
     }
 
 
@@ -210,6 +221,202 @@ def store_chunks(chunks: list, meta: dict) -> int:
         metadatas=metadatas
     )
     return len(chunks)
+
+
+def ingest_judgment_text(text: str, meta: dict) -> dict:
+    """
+    Index a fetched judgment (plain text, not PDF) into ChromaDB.
+    Used by Indian Kanoon auto-fetch.
+    """
+    if len(text) < 200:
+        raise HTTPException(status_code=422, detail="Judgment text too short to index.")
+
+    case_file = meta.get("case_file") or "fetched_judgment"
+    meta      = {**meta, "case_file": case_file, "doc_type": meta.get("doc_type", "judgment")}
+
+    # Duplicate check by case_file.
+    try:
+        existing = collection.get(where={"case_file": case_file}, include=["metadatas"])
+        if existing and existing.get("ids"):
+            return {
+                "status":      "already_exists",
+                "message":     f"'{meta.get('case_name', case_file)}' is already in your corpus.",
+                "case_file":   case_file,
+                "case_name":   meta.get("case_name", case_file),
+                "court":       meta.get("court", "Unknown"),
+                "year":        meta.get("year", "Unknown"),
+                "chunk_count": len(existing["ids"]),
+                "corpus_size": collection.count(),
+                "source_url":  meta.get("source_url", ""),
+            }
+    except Exception:
+        pass
+
+    chunks = chunk_legal_text(text, case_file)
+    if not chunks:
+        raise HTTPException(status_code=422, detail="Could not chunk the fetched judgment.")
+
+    count = store_chunks(chunks, meta)
+
+    # Persist raw text for audit / re-index.
+    os.makedirs(RAW_TEXTS_FOLDER, exist_ok=True)
+    txt_path = os.path.join(RAW_TEXTS_FOLDER, f"{case_file}.txt")
+    try:
+        with open(txt_path, "w", encoding="utf-8") as f:
+            f.write(text)
+    except OSError:
+        pass
+
+    return {
+        "status":      "success",
+        "message":     f"Fetched and indexed '{meta.get('case_name', case_file)}'.",
+        "case_file":   case_file,
+        "case_name":   meta.get("case_name", case_file),
+        "court":       meta.get("court", "Unknown"),
+        "year":        meta.get("year", "Unknown"),
+        "chunk_count": count,
+        "corpus_size": collection.count(),
+        "source_url":  meta.get("source_url", ""),
+        "doc_id":      meta.get("doc_id", ""),
+    }
+
+
+class CaseSearchRequest(BaseModel):
+    query:       str
+    max_results: int = 6
+
+
+class CaseFetchRequest(BaseModel):
+    query:   str = ""
+    doc_id:  str = ""
+    url:     str = ""
+
+
+# ═════════════════════════════════════════════
+# ROUTE 0 — CORPUS STATUS
+# GET /api/corpus/status
+# ═════════════════════════════════════════════
+@router.get("/api/corpus/status")
+def corpus_status():
+    from utils import classify_doc_type
+    try:
+        res   = collection.get(include=["metadatas"])
+        metas = res.get("metadatas", []) or []
+        per_case = {}
+        for m in metas:
+            cf = (m or {}).get("case_file", "unknown")
+            if cf not in per_case:
+                per_case[cf] = m
+        judgments, statutes = 0, 0
+        for cf, m in per_case.items():
+            dt = (m or {}).get("doc_type") or classify_doc_type("", cf)
+            if dt == "statute":
+                statutes += 1
+            else:
+                judgments += 1
+        return {
+            "total_chunks":    collection.count(),
+            "total_cases":     len(per_case),
+            "judgment_cases":  judgments,
+            "statute_cases":   statutes,
+            "has_judgments":   judgments > 0,
+            "thin_corpus":     judgments < 2,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ═════════════════════════════════════════════
+# ROUTE 0b — SEARCH CASES (preview, no ingest)
+# POST /api/corpus/search-cases
+# ═════════════════════════════════════════════
+@router.post("/api/corpus/search-cases")
+def search_cases(req: CaseSearchRequest):
+    from legal_fetch import extract_case_names, search_judgments
+    query = (req.query or "").strip()
+    if not query:
+        raise HTTPException(status_code=400, detail="Query cannot be empty.")
+
+    # If free text contains a case name, also search that directly.
+    names   = extract_case_names(query)
+    results = search_judgments(query, max_results=req.max_results)
+    for name in names[:2]:
+        extra = search_judgments(name, max_results=3)
+        seen  = {r["title"][:50].lower() for r in results}
+        for r in extra:
+            k = r["title"][:50].lower()
+            if k not in seen:
+                seen.add(k)
+                results.append(r)
+
+    results.sort(key=lambda x: x.get("relevance", 0), reverse=True)
+    return {
+        "query":            query,
+        "detected_cases":   names,
+        "results":          results[:req.max_results],
+        "count":            min(len(results), req.max_results),
+    }
+
+
+# ═════════════════════════════════════════════
+# ROUTE 0c — FETCH & INGEST CASE
+# POST /api/corpus/fetch-case
+# ═════════════════════════════════════════════
+@router.post("/api/corpus/fetch-case")
+def fetch_case(req: CaseFetchRequest):
+    from legal_fetch import (
+        fetch_ik_document_text,
+        safe_case_file,
+        search_judgments,
+        pick_best_match,
+        extract_case_names,
+    )
+
+    doc_id = (req.doc_id or "").strip()
+    query  = (req.query or "").strip()
+
+    # Resolve doc_id from URL if needed.
+    if not doc_id and req.url:
+        m = re.search(r"/doc/(\d+)", req.url)
+        if m:
+            doc_id = m.group(1)
+
+    # Auto-pick best match when only a query is given.
+    if not doc_id:
+        if not query:
+            raise HTTPException(status_code=400, detail="Provide query, doc_id, or url.")
+        names = extract_case_names(query)
+        search_q = names[0] if names else query
+        hits = search_judgments(search_q, max_results=5)
+        best = pick_best_match(search_q, hits)
+        if not best or not best.get("doc_id"):
+            raise HTTPException(
+                status_code=404,
+                detail=f"No matching judgment found on Indian Kanoon for: {search_q}",
+            )
+        doc_id = best["doc_id"]
+
+    fetched = fetch_ik_document_text(doc_id)
+    if not fetched:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Could not download judgment {doc_id} from Indian Kanoon.",
+        )
+
+    title     = fetched["title"]
+    case_file = safe_case_file(doc_id, title)
+    meta = {
+        "case_name":   title[:120],
+        "court":       fetched.get("court", "Unknown"),
+        "year":        fetched.get("year", "Unknown"),
+        "case_file":   case_file,
+        "area_of_law": "General",
+        "doc_type":    "judgment",
+        "source":      fetched.get("source", "Indian Kanoon"),
+        "source_url":  fetched.get("url", ""),
+        "doc_id":      doc_id,
+    }
+    return ingest_judgment_text(fetched["text"], meta)
 
 
 # ═════════════════════════════════════════════
@@ -337,6 +544,62 @@ async def upload_corpus(file: UploadFile = File(...)):
             status_code=500,
             detail=f"Failed to process PDF: {str(e)}"
         )
+
+
+# ═════════════════════════════════════════════
+# ROUTE 1b — RETAG DOC TYPES (one-time migration)
+# POST /api/corpus/retag-doc-types
+# Classifies every existing chunk as statute vs
+# judgment so older uploads (e.g. the Constitution)
+# stop flooding precedent search. Safe to re-run.
+# ═════════════════════════════════════════════
+@router.post("/api/corpus/retag-doc-types")
+def retag_doc_types():
+    from utils import classify_doc_type
+    try:
+        res   = collection.get(include=['documents', 'metadatas'])
+        ids   = res.get('ids', []) or []
+        docs  = res.get('documents', []) or []
+        metas = res.get('metadatas', []) or []
+
+        # Decide one doc_type per case_file from its first/representative chunk,
+        # then apply to all of that case's chunks for consistency.
+        per_case_text = {}
+        for doc, meta in zip(docs, metas):
+            cf = (meta or {}).get('case_file', 'unknown')
+            if cf not in per_case_text:
+                per_case_text[cf] = doc or ""
+        per_case_type = {
+            cf: classify_doc_type(txt, cf) for cf, txt in per_case_text.items()
+        }
+
+        upd_ids, upd_metas = [], []
+        counts = {"statute": 0, "judgment": 0}
+        for cid, meta in zip(ids, metas):
+            meta = dict(meta or {})
+            cf   = meta.get('case_file', 'unknown')
+            dt   = per_case_type.get(cf, "judgment")
+            if meta.get('doc_type') != dt:
+                meta['doc_type'] = dt
+                upd_ids.append(cid)
+                upd_metas.append(meta)
+            counts[dt] = counts.get(dt, 0) + 1
+
+        if upd_ids:
+            collection.update(ids=upd_ids, metadatas=upd_metas)
+
+        statute_cases = sorted(cf for cf, dt in per_case_type.items() if dt == "statute")
+        return {
+            "status":          "retagged",
+            "chunks_updated":  len(upd_ids),
+            "chunk_doc_types": counts,
+            "statute_documents": statute_cases,
+            "judgment_documents": sorted(
+                cf for cf, dt in per_case_type.items() if dt == "judgment"
+            ),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ═════════════════════════════════════════════
